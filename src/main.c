@@ -7,29 +7,12 @@ static const char *TAG = "main"; //prints
 
 void vTimerCallback(TimerHandle_t xTimer) // timer callback
 {
-    // read_throttle(&adc_value); // convert to percentage
-    switch (ph_count)
-    {
-    case 4:
-        set_duty(duty, 0, 0, duty, 0, 0); // Fase AH, BL
-        break;
-    case 6:
-        set_duty(0, 0, 0, duty, duty, 0); // Fase BL, CH
-        break;
-    case 2:
-        set_duty(0, duty, 0, 0, duty, 0); // Fase CH
-        break;
-    case 3:
-        set_duty(0, duty, duty, 0, 0, 0); // Fase BH
-        break;
-    case 1:
-        set_duty(0, 0, duty, 0, 0, duty); // Fase AH, CL
-        break;
-    case 5:
-        set_duty(duty, 0, 0, 0, 0, duty); // Fase AH, CL
-        break;
-    }
-    //ESP_LOGI(TAG, "Phase: %d", ph_count);
+    //currentA = adc1_get_raw(ADC1_CHANNEL_0);
+    //currentB = adc1_get_raw(ADC1_CHANNEL_3);
+    //currentC = adc1_get_raw(ADC1_CHANNEL_6);
+    read_throttle(&adc_value); 
+
+    ESP_LOGI(TAG, "Generated current: %d", ph_count);
 }
 
 esp_err_t set_timer()
@@ -58,10 +41,7 @@ esp_err_t set_timer()
 void app_main()
 {
     init_led(); set_timer(); set_throttle(); set_pwm(); init_isr();
-    hall_a = gpio_get_level(HALL_PIN[0]);
-    hall_b = gpio_get_level(HALL_PIN[1]) << 1;
-    hall_c = gpio_get_level(HALL_PIN[2]) << 2;
-    ph_count = hall_a | hall_b | hall_c;
+    ph_count = gpio_get_level(HALL_PIN[0]) | gpio_get_level(HALL_PIN[1]) << 1 | gpio_get_level(HALL_PIN[2]) << 2;
 }
 
 esp_err_t init_isr()
@@ -89,8 +69,32 @@ esp_err_t init_isr()
 
 void isr_phase(void *arg)
 {
-    hall_a = gpio_get_level(HALL_PIN[0]);
-    hall_b = gpio_get_level(HALL_PIN[1]) << 1;
-    hall_c = gpio_get_level(HALL_PIN[2]) << 2;
-    ph_count = hall_a | hall_b | hall_c;
+    ph_count = gpio_get_level(HALL_PIN[0]) | gpio_get_level(HALL_PIN[1]) << 1 | gpio_get_level(HALL_PIN[2]) << 2;
+    switch (ph_count)
+    {
+    case 4:
+        set_duty(adc_value, 0, 0, adc_value, 0, 0); // Fase AH, BL
+        //currentA = gen_current;
+        break;
+    case 6:
+        set_duty(0, 0, 0, adc_value, adc_value, 0); // Fase BL, CH
+        //currentC = gen_current;
+        break;
+    case 2:
+        set_duty(0, adc_value, 0, 0, adc_value, 0); // Fase CH, AL
+        //currentC = gen_current;
+        break;
+    case 3:
+        set_duty(0, adc_value, adc_value, 0, 0, 0); // Fase BH, AL
+        //currentB = gen_current;
+        break;
+    case 1:
+        set_duty(0, 0, adc_value, 0, 0, adc_value); // Fase BH, CL
+        //currentB = gen_current;
+        break;
+    case 5:
+        set_duty(adc_value, 0, 0, 0, 0, adc_value); // Fase AH, CL
+        //currentA = gen_current;
+        break;
+    }
 }

@@ -17,7 +17,12 @@ const int8_t CH = 33, CL = 32, BH = 26, BL = 25, AH = 14, AL = 27; // PWM pins r
 const int8_t HALL_PIN[3] = {17, 18, 19}; // Hall sensor pins
 
 // Help Variables
-int adc_value = 0, led_state = 0, ph_count = 0, hall_a = 0, hall_b = 0, hall_c = 0, duty = 30;
+int adc_value = 0, led_state = 0; // 
+volatile int ph_count = 0; // Phase count
+int duty = 30; // Duty cycle percentage (0-100)
+int deadTime_ticks = 64; // 64 ticks = 400 ns at 80 MHz APB clock
+int currentA, currentB, currentC, gen_current; // Current readings for each phase    
+
 
 // Main timer for loop
 TimerHandle_t main_timer;
@@ -48,19 +53,17 @@ esp_err_t set_pwm()
     mcpwm_gpio_init(MCPWM_UNIT_0, MCPWM2B, AL);
     mcpwm_init(MCPWM_UNIT_0, MCPWM_TIMER_2, &pwm_config);
 
-    uint32_t deadtime_ticks = 96; // 600 ns
-
     mcpwm_deadtime_enable(MCPWM_UNIT_0, MCPWM_TIMER_0,
                           MCPWM_DEADTIME_BYPASS,
-                          deadtime_ticks, deadtime_ticks);
+                          deadTime_ticks, deadTime_ticks);
 
     mcpwm_deadtime_enable(MCPWM_UNIT_0, MCPWM_TIMER_1,
                           MCPWM_DEADTIME_BYPASS,
-                          deadtime_ticks, deadtime_ticks);
+                          deadTime_ticks, deadTime_ticks);
 
     mcpwm_deadtime_enable(MCPWM_UNIT_0, MCPWM_TIMER_2,
                           MCPWM_DEADTIME_BYPASS,
-                          deadtime_ticks, deadtime_ticks);
+                          deadTime_ticks, deadTime_ticks);
 
     mcpwm_sync_config_t sync_conf = {
         .sync_sig = MCPWM_SELECT_TIMER0_SYNC,
@@ -104,6 +107,15 @@ esp_err_t read_throttle(uint16_t *value)
     }
 
     return ret;
+}
+
+esp_err_t read_current()
+{
+    adc1_config_width(ADC_WIDTH_BIT_12); // Resolución de 12 bits
+    adc1_config_channel_atten(ADC1_CHANNEL_0, ADC_ATTEN_DB_12); // GPIO36, fase A
+    adc1_config_channel_atten(ADC1_CHANNEL_3, ADC_ATTEN_DB_12); // GPIO39, fase B
+    adc1_config_channel_atten(ADC1_CHANNEL_6, ADC_ATTEN_DB_12); // GPIO34, fase C
+    return ESP_OK;
 }
 
 esp_err_t init_led()
