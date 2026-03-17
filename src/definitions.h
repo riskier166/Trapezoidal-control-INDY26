@@ -18,7 +18,7 @@ const int8_t HALL_PIN[3] = {17, 18, 19}; // Hall sensor pins
 
 // Help Variables
 int adc_value = 0, led_state = 0; // 
-volatile int ph_count = 0; // Phase count
+int ph_count = 0; // Phase count
 int duty = 30; // Duty cycle percentage (0-100)
 int deadTime_ticks = 64; // 64 ticks = 400 ns at 80 MHz APB clock
 int currentA, currentB, currentC, gen_current; // Current readings for each phase    
