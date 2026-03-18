@@ -18,10 +18,10 @@ const int8_t HALL_PIN[3] = {17, 18, 19}; // Hall sensor pins
 
 // Help Variables
 int adc_value = 0, led_state = 0; // 
-int ph_count = 0; // Phase count
+volatile int ph_count = 0; // Phase count
 int duty = 30; // Duty cycle percentage (0-100)
 int deadTime_ticks = 64; // 64 ticks = 400 ns at 80 MHz APB clock
-int currentA, currentB, currentC, gen_current; // Current readings for each phase    
+int currentA, currentB, currentC, gen_current; // Current readings for each phase  
 
 
 // Main timer for loop
@@ -76,7 +76,6 @@ esp_err_t set_pwm()
     mcpwm_set_timer_sync_output(MCPWM_UNIT_0,
                                 MCPWM_TIMER_0,
                                 MCPWM_SWSYNC_SOURCE_TEZ);
-
     return ESP_OK;
 }
 
