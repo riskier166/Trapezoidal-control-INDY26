@@ -9,6 +9,7 @@
 #include "esp_log.h"
 #include "driver/adc.h"
 #include "driver/mcpwm.h"
+#include "esp_timer.h"
 
 // GPIO declarations
 gpio_num_t LED_G = GPIO_NUM_16; // Indicator LED pin
@@ -17,16 +18,13 @@ const int8_t CH = 33, CL = 32, BH = 26, BL = 25, AH = 14, AL = 27; // PWM pins r
 const int8_t HALL_PIN[3] = {17, 18, 19}; // Hall sensor pins
 
 // Help Variables
-int adc_value = 0, led_state = 0; // 
-volatile int ph_count = 0; // Phase count
-int duty = 30; // Duty cycle percentage (0-100)
-int deadTime_ticks = 64; // 64 ticks = 400 ns at 80 MHz APB clock
+int adc_value = 0, led_state = 0; // ADC Throttle and led state
+volatile int ph_count = 0;
+int rpm_count = 0, rpm = 0; // Phase count and RPM count
+int duty = 30; // Duty cycle
+int deadTime_ticks = 64; // 64 ticks = 400 ns
 int currentA, currentB, currentC, gen_current; // Current readings for each phase  
-
-
-// Main timer for loop
-TimerHandle_t main_timer;
-int count_timer = 50;
+int last_time = 0, interval = 10000; // 10 ms interval
 
 esp_err_t set_pwm()
 {

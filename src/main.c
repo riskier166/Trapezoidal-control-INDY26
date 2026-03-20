@@ -1,34 +1,19 @@
 #include "definitions.h"
 
-esp_err_t init_isr(), set_timer(); // Inicialización ISR's
+esp_err_t init_isr(), create_tasks(); // Inicialización ISR's
 
 static const char *TAG = "main"; // prints
 
 void isr_phase(void *arg)
 {
-    ph_count = gpio_get_level(HALL_PIN[0])
-            | gpio_get_level(HALL_PIN[1]) << 1 
-            | gpio_get_level(HALL_PIN[2]) << 2;
-}
-
-void vTimerCallback(TimerHandle_t xTimer) // timer callback
-{
-    //currentA = adc1_get_raw(ADC1_CHANNEL_0);
-    //currentB = adc1_get_raw(ADC1_CHANNEL_3);
-    //currentC = adc1_get_raw(ADC1_CHANNEL_6);
-    read_throttle(&adc_value);
-}
-
-void app_main()
-{
-    init_led(); 
-    set_timer(); 
-    set_throttle(); set_pwm(); init_isr();
     ph_count = gpio_get_level(HALL_PIN[0]) 
-            | gpio_get_level(HALL_PIN[1]) << 1 
-            | gpio_get_level(HALL_PIN[2]) << 2;
-    set_duty(0,0,0,0,0,0); // Inicializa con duty 0
+    | gpio_get_level(HALL_PIN[1]) << 1 
+    | gpio_get_level(HALL_PIN[2]) << 2;
+    rpm_count++;
+}
 
+void main_comm(void *arg)
+{
     while (true)
     {
         switch (ph_count)
@@ -61,6 +46,42 @@ void app_main()
     }
 }
 
+void control_read(void *arg)
+{
+
+    while (1)
+    {
+        int64_t current_time = esp_timer_get_time();
+
+        if ((current_time - last_time) >= interval)
+        {
+            last_time = current_time;
+            read_throttle(&adc_value);
+            if (rpm_count > 0)
+            {
+                rpm = (rpm_count * 60000)/(240); // 240 = 10ms * 6 steps * 4 pole pairs
+            }
+            else
+            {
+                rpm = 0;
+            }
+            rpm_count = 0; // Reset RPM count every interval
+            ESP_LOGI(TAG, "RPM: %d, Duty Cycle: %d", rpm, adc_value);
+        }
+    }
+}
+
+void app_main()
+{
+    init_led();
+    set_throttle();
+    set_pwm();
+    init_isr();
+    create_tasks();
+    ph_count = gpio_get_level(HALL_PIN[0]) | gpio_get_level(HALL_PIN[1]) << 1 | gpio_get_level(HALL_PIN[2]) << 2;
+    set_duty(0, 0, 0, 0, 0, 0); // Inicializa con duty 0
+}
+
 esp_err_t init_isr()
 {
 
@@ -84,25 +105,21 @@ esp_err_t init_isr()
     return ESP_OK;
 }
 
-esp_err_t set_timer()
+esp_err_t create_tasks()
 {
-    ESP_LOGI(TAG, "Timer initializing...");
-    main_timer = xTimerCreate("main_timer",
-                              pdMS_TO_TICKS(count_timer),
-                              pdTRUE,
-                              NULL,
-                              vTimerCallback);
-    if (main_timer == NULL)
-    {
-        ESP_LOGE(TAG, "Failed to create timer");
-    }
-    else
-    {
-        if (xTimerStart(main_timer, 0) != pdPASS)
-        {
-            ESP_LOGE(TAG, "Failed to start timer");
-        }
-    }
-
+    static uint8_t ucParameterToPass;
+    TaskHandle_t xHandle = NULL;
+    xTaskCreate(main_comm,
+                "Commutation",
+                4096,
+                &ucParameterToPass,
+                1,
+                &xHandle);
+    xTaskCreate(control_read,
+                "Control Read",
+                4096,
+                &ucParameterToPass,
+                2,
+                &xHandle);
     return ESP_OK;
 }
