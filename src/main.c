@@ -1,26 +1,19 @@
 #include "definitions.h"
 
-esp_err_t init_isr(), set_timer(); // Inicialización ISR's
+esp_err_t init_isr(), create_tasks(); // Inicialización ISR's
 
 static const char *TAG = "main"; // prints
 
 void isr_phase(void *arg)
 {
-    ph_count = gpio_get_level(HALL_PIN[0])
-            | gpio_get_level(HALL_PIN[1]) << 1 
-            | gpio_get_level(HALL_PIN[2]) << 2;
+    ph_count = gpio_get_level(HALL_PIN[0]) 
+    | gpio_get_level(HALL_PIN[1]) << 1 
+    | gpio_get_level(HALL_PIN[2]) << 2;
+    rpm_count++;
 }
 
-void app_main()
+void main_comm(void *arg)
 {
-    init_led(); 
-    set_timer(); 
-    set_throttle(); set_pwm(); init_isr();
-    ph_count = gpio_get_level(HALL_PIN[0]) 
-            | gpio_get_level(HALL_PIN[1]) << 1 
-            | gpio_get_level(HALL_PIN[2]) << 2;
-    set_duty(0,0,0,0,0,0); // Inicializa con duty 0
-
     while (true)
     {
         switch (ph_count)
@@ -53,6 +46,41 @@ void app_main()
     }
 }
 
+void control_read(void *arg)
+{
+
+    while (1)
+    {
+        int64_t current_time = esp_timer_get_time();
+
+        if ((current_time - last_time) >= interval)
+        {
+            last_time = current_time;
+            if (rpm_count > 0)
+            {
+                rpm = (15 * interval) / (rpm_count);
+            }
+            else
+            {
+                rpm = 0;
+            }
+            rpm_count = 0; // Reset RPM count every interval
+            ESP_LOGI(TAG, "RPM: %d", rpm);
+        }
+    }
+}
+
+void app_main()
+{
+    init_led();
+    set_throttle();
+    set_pwm();
+    init_isr();
+    create_tasks();
+    ph_count = gpio_get_level(HALL_PIN[0]) | gpio_get_level(HALL_PIN[1]) << 1 | gpio_get_level(HALL_PIN[2]) << 2;
+    set_duty(0, 0, 0, 0, 0, 0); // Inicializa con duty 0
+}
+
 esp_err_t init_isr()
 {
 
@@ -73,5 +101,24 @@ esp_err_t init_isr()
         gpio_isr_handler_add(HALL_PIN[i], isr_phase, NULL);
     }
 
+    return ESP_OK;
+}
+
+esp_err_t create_tasks()
+{
+    static uint8_t ucParameterToPass;
+    TaskHandle_t xHandle = NULL;
+    xTaskCreate(main_comm,
+                "Commutation",
+                4096,
+                &ucParameterToPass,
+                1,
+                &xHandle);
+    xTaskCreate(control_read,
+                "Control Read",
+                4096,
+                &ucParameterToPass,
+                2,
+                &xHandle);
     return ESP_OK;
 }
