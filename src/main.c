@@ -17,27 +17,27 @@ void main_comm(void *arg)
         switch (ph_count)
         {
         case 4:
-            set_duty(duty, 0, 0, duty, 0, 0); // Fase AH, BL
+            set_duty(u, 0, 0, u, 0, 0); // Fase AH, BL
             // currentA = gen_current;
             break;
         case 6:
-            set_duty(0, 0, 0, duty, duty, 0); // Fase BL, CH
+            set_duty(0, 0, 0, u, u, 0); // Fase BL, CH
             // currentC = gen_current;
             break;
         case 2:
-            set_duty(0, duty, 0, 0, duty, 0); // Fase CH, AL
+            set_duty(0, u, 0, 0, u, 0); // Fase CH, AL
             // currentC = gen_current;
             break;
         case 3:
-            set_duty(0, duty, duty, 0, 0, 0); // Fase BH, AL
+            set_duty(0, u, u, 0, 0, 0); // Fase BH, AL
             // currentB = gen_current;
             break;
         case 1:
-            set_duty(0, 0, duty, 0, 0, duty); // Fase BH, CL
+            set_duty(0, 0, u, 0, 0, u); // Fase BH, CL
             // currentB = gen_current;
             break;
         case 5:
-            set_duty(duty, 0, 0, 0, 0, duty); // Fase AH, CL
+            set_duty(u, 0, 0, 0, 0, u); // Fase AH, CL
             // currentA = gen_current;
             break;
         }
@@ -57,16 +57,14 @@ void control_read(void *arg)
             //read_throttle(&adc_value);
             if (rpm_count > 0)
             {
-                rpm = (rpm_count * 60000.0) / (TexCoeff); 
-                // 240 = 10ms * 6 steps * 4 pole pairs TEXAS
-                // 1260 = 10ms * 6 steps * 21 pole pairs R100 KV90 
+                rpm = (rpm_count * 60000.0) / (TexCoeff);  
             }
             else
             {
                 rpm = 0.0;
             }
             rpm_count = 0; // Reset RPM count every interval
-            reference = 0.1299*(duty*duty*duty)-15.605*(duty*duty)+649.08*duty-5931.8;
+            reference = 0.1299*(duty*duty*duty)-15.605*(duty*duty)+649.08*duty-5931.8; // Posteriormente cambiar por adc_value
             measurement = rpm;
             error = reference - measurement;
 
