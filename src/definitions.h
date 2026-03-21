@@ -143,7 +143,7 @@ esp_err_t set_throttle(void)
 
 float PID_calc(float error, float Kp, float ki, int dt) // dt=interval
 {
-    float prev_error, integral;
+    float prev_error=0, integral=0;
     float U=Kp*error;
     integral+=((float)dt/2)*(error+prev_error);
     U+=ki*integral;
