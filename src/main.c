@@ -6,9 +6,7 @@ static const char *TAG = "main"; // prints
 
 void isr_phase(void *arg)
 {
-    ph_count = gpio_get_level(HALL_PIN[0]) 
-    | gpio_get_level(HALL_PIN[1]) << 1 
-    | gpio_get_level(HALL_PIN[2]) << 2;
+    ph_count = gpio_get_level(HALL_PIN[0]) | gpio_get_level(HALL_PIN[1]) << 1 | gpio_get_level(HALL_PIN[2]) << 2;
     rpm_count++;
 }
 
@@ -19,27 +17,27 @@ void main_comm(void *arg)
         switch (ph_count)
         {
         case 4:
-            set_duty(adc_value, 0, 0, adc_value, 0, 0); // Fase AH, BL
+            set_duty(duty, 0, 0, duty, 0, 0); // Fase AH, BL
             // currentA = gen_current;
             break;
         case 6:
-            set_duty(0, 0, 0, adc_value, adc_value, 0); // Fase BL, CH
+            set_duty(0, 0, 0, duty, duty, 0); // Fase BL, CH
             // currentC = gen_current;
             break;
         case 2:
-            set_duty(0, adc_value, 0, 0, adc_value, 0); // Fase CH, AL
+            set_duty(0, duty, 0, 0, duty, 0); // Fase CH, AL
             // currentC = gen_current;
             break;
         case 3:
-            set_duty(0, adc_value, adc_value, 0, 0, 0); // Fase BH, AL
+            set_duty(0, duty, duty, 0, 0, 0); // Fase BH, AL
             // currentB = gen_current;
             break;
         case 1:
-            set_duty(0, 0, adc_value, 0, 0, adc_value); // Fase BH, CL
+            set_duty(0, 0, duty, 0, 0, duty); // Fase BH, CL
             // currentB = gen_current;
             break;
         case 5:
-            set_duty(adc_value, 0, 0, 0, 0, adc_value); // Fase AH, CL
+            set_duty(duty, 0, 0, 0, 0, duty); // Fase AH, CL
             // currentA = gen_current;
             break;
         }
@@ -56,28 +54,34 @@ void control_read(void *arg)
         if ((current_time - last_time) >= interval)
         {
             last_time = current_time;
-            read_throttle(&adc_value);
+            //read_throttle(&adc_value);
             if (rpm_count > 0)
             {
-                rpm = (rpm_count * 60000)/(240); // 240 = 10ms * 6 steps * 4 pole pairs
+                rpm = (rpm_count * 60000.0) / (TexCoeff); 
+                // 240 = 10ms * 6 steps * 4 pole pairs TEXAS
+                // 1260 = 10ms * 6 steps * 21 pole pairs R100 KV90 
             }
             else
             {
-                rpm = 0;
+                rpm = 0.0;
             }
             rpm_count = 0; // Reset RPM count every interval
-            ESP_LOGI(TAG, "RPM: %d, Duty Cycle: %d", rpm, adc_value);
+            reference = 0.1299*(duty*duty*duty)-15.605*(duty*duty)+649.08*duty-5931.8;
+            measurement = rpm;
+            error = reference - measurement;
+
+            u = PID_calc(error,PI_val[0],PI_val[1],interval);
+
+            ESP_LOGI(TAG, "DUTY: %f, RPM's: %f, Reference: %f \n", adc_value, rpm, reference);
         }
     }
 }
 
 void app_main()
 {
-    init_led();
-    set_throttle();
-    set_pwm();
-    init_isr();
-    create_tasks();
+    esp_task_wdt_deinit();
+    init_led();set_throttle();set_pwm();
+    init_isr();create_tasks();
     ph_count = gpio_get_level(HALL_PIN[0]) | gpio_get_level(HALL_PIN[1]) << 1 | gpio_get_level(HALL_PIN[2]) << 2;
     set_duty(0, 0, 0, 0, 0, 0); // Inicializa con duty 0
 }

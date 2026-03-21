@@ -10,6 +10,7 @@
 #include "driver/adc.h"
 #include "driver/mcpwm.h"
 #include "esp_timer.h"
+#include "esp_task_wdt.h"
 
 // GPIO declarations
 gpio_num_t LED_G = GPIO_NUM_16; // Indicator LED pin
@@ -18,13 +19,22 @@ const int8_t CH = 33, CL = 32, BH = 26, BL = 25, AH = 14, AL = 27; // PWM pins r
 const int8_t HALL_PIN[3] = {17, 18, 19}; // Hall sensor pins
 
 // Help Variables
-int adc_value = 0, led_state = 0; // ADC Throttle and led state
-volatile int ph_count = 0;
-int rpm_count = 0, rpm = 0; // Phase count and RPM count
-int duty = 30; // Duty cycle
+float adc_value = 0.0; // ADC Throttle and led state
+volatile int ph_count = 0; // Hall sensors state
+// RPM's calculation 
+int rpm_count = 0;
+float rpm = 0; // Phase count and RPM count
+float TexCoeff = 240.0, RKV_Coeff = 1260.0;
+// PWM
+float duty = 30.0; // Duty cycle
 int deadTime_ticks = 64; // 64 ticks = 400 ns
-int currentA, currentB, currentC, gen_current; // Current readings for each phase  
-int last_time = 0, interval = 10000; // 10 ms interval
+//Currents
+int currentA, currentB, currentC, gen_current; // Current readings for each phase
+//polling 
+int last_time = 0, interval = 10000; // 10 ms interval, 
+//Control
+float reference = 0.0, measurement = 0.0, u = 0, error = 0.0; // control variables 
+float PI_val [2] = {0.0,0.0}; // Coeficientes PI
 
 esp_err_t set_pwm()
 {
@@ -78,7 +88,7 @@ esp_err_t set_pwm()
 }
 
 //Función para actualizar los duty cycles
-void set_duty(int AH, int AL, int BH, int BL, int CH, int CL)
+void set_duty(float AH, float AL, float BH, float BL, float CH, float CL)
 {
     mcpwm_set_duty(MCPWM_UNIT_0, MCPWM_TIMER_2, MCPWM_GEN_A, AH); // Fase AH
     mcpwm_set_duty(MCPWM_UNIT_0, MCPWM_TIMER_2, MCPWM_GEN_B, AL); // Fase AL
@@ -91,7 +101,7 @@ void set_duty(int AH, int AL, int BH, int BL, int CH, int CL)
 // ADC2 throttle reading function
 esp_err_t read_throttle(uint16_t *value) 
 {
-    int raw = 0;
+    float raw = 0;
 
     esp_err_t ret = adc2_get_raw(
         ADC2_CHANNEL_0,
@@ -100,7 +110,7 @@ esp_err_t read_throttle(uint16_t *value)
 
     if (ret == ESP_OK)
     {
-        *value = (uint16_t)raw * 100 / 4095; // convert to percentage
+        *value = (float)raw * 100.00 / 4095.00; // convert to percentage
     }
 
     return ret;
@@ -129,6 +139,16 @@ esp_err_t set_throttle(void)
         ADC_ATTEN_DB_11 // hasta ~3.3V
     );
     return ret;
+}
+
+float PID_calc(float error, float Kp, float ki, int dt) // dt=interval
+{
+    float prev_error, integral;
+    float U=Kp*error;
+    integral+=((float)dt/2)*(error+prev_error);
+    U+=ki*integral;
+    prev_error=error;
+    return U;
 }
 
 #endif // __DEFINITIONS_H__
