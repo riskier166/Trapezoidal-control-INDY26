@@ -12,6 +12,13 @@
 #include "esp_timer.h"
 #include "esp_task_wdt.h"
 
+//Control
+#define REF_R100 0.1299*(adc_value*adc_value*adc_value)-15.605*(adc_value*adc_value)+649.08*adc_value-5931.8;
+#define REF_TEXAS -0.4792*(adc_value*adc_value)+110.01*(adc_value)-1276.4;
+float reference = 0.0, measurement = 0.0, u = 0, error = 0.0; // control variables 
+float PI_texas [2] = {13.143269,22783.72239}; // Coeficientes P:13.143269, I:22783.72239
+
+
 // GPIO declarations
 gpio_num_t LED_G = GPIO_NUM_16; // Indicator LED pin
 const int8_t adc_throttle = 4; // Throttle ADC pin
@@ -19,22 +26,19 @@ const int8_t CH = 33, CL = 32, BH = 26, BL = 25, AH = 14, AL = 27; // PWM pins r
 const int8_t HALL_PIN[3] = {17, 18, 19}; // Hall sensor pins
 
 // Help Variables
-float adc_value = 0.0; // ADC Throttle and led state
 volatile int ph_count = 0; // Hall sensors state
 // RPM's calculation 
 int rpm_count = 0;
-float rpm = 0; // Phase count and RPM count
+float rpm = 0; // Pshase count and RPM count
 float TexCoeff = 240.0, RKV_Coeff = 1260.0;
 // PWM
-float duty = 30.0; // Duty cycle
+float adc_value = 0.0; // ADC Throttle
+float duty = 45.0; // Duty cycle
 int deadTime_ticks = 64; // 64 ticks = 400 ns
 //Currents
 int currentA, currentB, currentC, gen_current; // Current readings for each phase
 //polling 
 int last_time = 0, interval = 10000; // 10 ms interval, 
-//Control
-float reference = 0.0, measurement = 0.0, u = 0, error = 0.0; // control variables 
-float PI_val [2] = {0.0,0.0}; // Coeficientes PI
 
 esp_err_t set_pwm()
 {

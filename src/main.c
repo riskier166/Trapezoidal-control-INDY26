@@ -64,13 +64,12 @@ void control_read(void *arg)
                 rpm = 0.0;
             }
             rpm_count = 0; // Reset RPM count every interval
-            reference = 0.1299*(duty*duty*duty)-15.605*(duty*duty)+649.08*duty-5931.8; // Posteriormente cambiar por adc_value
+            reference = REF_TEXAS; // Posteriormente cambiar por adc_value
             measurement = rpm;
             error = reference - measurement;
-
-            u = PID_calc(error,PI_val[0],PI_val[1],interval);
-
-            ESP_LOGI(TAG, "DUTY: %f, RPM's: %f, Reference: %f \n", adc_value, rpm, reference);
+            u = PID_calc(error,PI_texas[0],PI_texas[1],interval);
+            
+            ESP_LOGI(TAG, "DUTY: %f, RPM's: %f Reference: %f\n", adc_value, rpm, reference);
         }
     }
 }
