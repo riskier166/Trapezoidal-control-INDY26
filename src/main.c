@@ -68,14 +68,11 @@ void control_read(void *arg)
         {
             last_time = current_time;
 
+            // Calcular error y aplicar PI
             float dt = interval / 1000000.0;
-
             measurement = get_currents();
-
             error = current_reference - measurement;
-
             u = PID_calc(error, PI_R100[0], PI_R100[1], dt);
-
             // saturación
             if (u > 95.0)
                 u = 95.0;
