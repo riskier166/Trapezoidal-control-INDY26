@@ -14,12 +14,14 @@
 #include "math.h"
 
 //Control
-#define REF_R100 0.1299*(adc_value*adc_value*adc_value)-15.605*(adc_value*adc_value)+649.08*adc_value-5931.8;
-#define REF_TEXAS -0.4792*(adc_value*adc_value)+110.01*(adc_value)-1276.4;
 float reference = 0.0, measurement = 0.0, u = 0, error = 0.0; // control variables 
 float PI_texas [2] = {13.143269,22783.72239}; // Coeficientes P:13.143269, I:22783.72239
+float PI_R100 [2] = {15.0, 500.0}; // Coeficientes P:20.0, I:500.0
 volatile float current, raw = 0, current_global = 0, current_channel;
+// PI
 float prev_error=0, integral=0;
+int dt = 1000 / 1000000; // convertir a segundos 
+float current_reference = 2.5; // 2 Ampere de referencia
 
 // GPIO declarations
 gpio_num_t LED_G = GPIO_NUM_16; // Indicator LED pin
@@ -44,7 +46,7 @@ int deadTime_ticks = 64; // 64 ticks = 400 ns
 volatile float currentA, currentB, currentC, gen_current; // Current readings for each phase
 
 //polling 
-int last_time = 0, interval = 1000; // 1 ms interval, 
+int last_time = 0, interval = 1000; // 1 ms interval 
 
 esp_err_t set_pwm()
 {

@@ -77,7 +77,7 @@ void control_read(void *arg)
 
             // oversampling
             int sum = 0;
-            for (int i = 0; i < 4; i++)  // puedes bajar a 4 para aligerar
+            for (int i = 0; i < 4; i++) // puedes bajar a 4 para aligerar
             {
                 sum += adc1_get_raw(current_channel);
             }
@@ -102,10 +102,19 @@ void control_read(void *arg)
 
             current_global = fabs(current_filtered);
 
-            //reference = REF_TEXAS; // Posteriormente cambiar por adc_value
+            float dt = interval / 1000000.0;
+
             measurement = current_global;
-            error = 1 - measurement;
-            u = PID_calc(error,PI_texas[0],PI_texas[1],interval);
+
+            error = current_reference - measurement;
+
+            u = PID_calc(error, PI_R100[0], PI_R100[1], dt);
+
+            // saturación
+            if (u > 95.0)
+                u = 95.0;
+            if (u < 5.0)
+                u = 5.0;
 
             ESP_LOGE(TAG, "Current: %f", current_global);
         }
