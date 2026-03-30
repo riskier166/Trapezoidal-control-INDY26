@@ -24,12 +24,12 @@ const float alpha = 0.2;
 // Control
 float reference = 0.0, measurement = 0.0, u = 0, error = 0.0; // control variables
 float PI_texas[2] = {13.143269, 22783.72239};                 // Coeficientes P:13.143269, I:22783.72239
-float PI_R100[2] = {15.0, 500.0};                             // Coeficientes P:20.0, I:500.0
+float PI_R100[2] = {20.0, 400.0};                             // Coeficientes P:10.0, I:500.0
 volatile float current, raw = 0, current_global = 0, current_channel;
 // PI
 float prev_error = 0, integral = 0;
 int dt = 1000 / 1000000;       // convertir a segundos
-float current_reference = 2.5; // 2 Ampere de referencia
+float current_reference = 2.3; // 2 Ampere de referencia ////////////////////////////////////////
 
 // GPIO declarations
 gpio_num_t LED_G = GPIO_NUM_16;                                    // Indicator LED pin
@@ -160,7 +160,7 @@ esp_err_t set_throttle(void)
 
 float get_currents()
 {
-    // oversampling pa quitarle ruido a esta shit
+    // promedio pa quitarle ruido a esta shit
     int sum = 0;
     for (int i = 0; i < 4; i++)
     {
@@ -198,7 +198,7 @@ float PID_calc(float error, float Kp, float Ki, float dt)
     // Integral con anti-windup
     integral += error * dt;
 
-    // Clamp de integral
+    // Clamp de integral xddd
     if (integral > 5.0)
         integral = 5.0;
     if (integral < -5.0)
