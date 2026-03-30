@@ -12,40 +12,57 @@ void isr_phase(void *arg)
 
 void main_comm(void *arg)
 {
+    int last_ph = -1;
+
     while (true)
     {
-        switch (ph_count)
+        int local_ph = ph_count;
+
+        if (local_ph != last_ph)
         {
-        case 4:
-            set_duty(u, 0, 0, u, 0, 0); // Fase AH, BL
-            // currentA = gen_current;
-            break;
-        case 6:
-            set_duty(0, 0, 0, u, u, 0); // Fase BL, CH
-            // currentC = gen_current;
-            break;
-        case 2:
-            set_duty(0, u, 0, 0, u, 0); // Fase CH, AL
-            // currentC = gen_current;
-            break;
-        case 3:
-            set_duty(0, u, u, 0, 0, 0); // Fase BH, AL
-            // currentB = gen_current;
-            break;
-        case 1:
-            set_duty(0, 0, u, 0, 0, u); // Fase BH, CL
-            // currentB = gen_current;
-            break;
-        case 5:
-            set_duty(u, 0, 0, 0, 0, u); // Fase AH, CL
-            // currentA = gen_current;
-            break;
+            last_ph = local_ph;
+
+            switch (local_ph)
+            {
+            case 4: // AH, BL → medir A
+                set_duty(duty, 0, 0, duty, 0, 0);
+                current_channel = ADC1_CHANNEL_0;
+                break;
+
+            case 6: // BL, CH → medir C
+                set_duty(0, 0, 0, duty, duty, 0);
+                current_channel = ADC1_CHANNEL_6;
+                break;
+
+            case 2: // CH, AL → medir C
+                set_duty(0, duty, 0, 0, duty, 0);
+                current_channel = ADC1_CHANNEL_6;
+                break;
+
+            case 3: // BH, AL → medir B
+                set_duty(0, duty, duty, 0, 0, 0);
+                current_channel = ADC1_CHANNEL_3;
+                break;
+
+            case 1: // BH, CL → medir B
+                set_duty(0, 0, duty, 0, 0, duty);
+                current_channel = ADC1_CHANNEL_3;
+                break;
+
+            case 5: // AH, CL → medir A
+                set_duty(duty, 0, 0, 0, 0, duty);
+                current_channel = ADC1_CHANNEL_0;
+                break;
+            }
         }
     }
 }
 
 void control_read(void *arg)
 {
+    static int last_valid = 2180;
+    static float current_filtered = 0.0;
+    const float alpha = 0.2;
 
     while (1)
     {
@@ -54,22 +71,38 @@ void control_read(void *arg)
         if ((current_time - last_time) >= interval)
         {
             last_time = current_time;
-            //read_throttle(&adc_value);
-            if (rpm_count > 0)
+
+            // pequeño delay para evitar switching noise
+            esp_rom_delay_us(2);
+
+            // oversampling
+            int sum = 0;
+            for (int i = 0; i < 4; i++)  // puedes bajar a 4 para aligerar
             {
-                rpm = (rpm_count * 60000.0) / (TexCoeff);  
+                sum += adc1_get_raw(current_channel);
+            }
+            int raw = sum / 4;
+
+            // clamp
+            if (raw < 1800 || raw > 2600)
+            {
+                raw = last_valid;
             }
             else
             {
-                rpm = 0.0;
+                last_valid = raw;
             }
-            rpm_count = 0; // Reset RPM count every interval
-            reference = REF_TEXAS; // Posteriormente cambiar por adc_value
-            measurement = rpm;
-            error = reference - measurement;
-            u = PID_calc(error,PI_texas[0],PI_texas[1],interval);
-            
-            ESP_LOGI(TAG, "DUTY: %f, RPM's: %f Reference: %f\n", adc_value, rpm, reference);
+
+            float Vout = (raw / 4095.0) * 3.3;
+            float Vsense = (Vout - 1.75) / 20.0;
+            float current = Vsense / 0.001;
+
+            // filtro
+            current_filtered = alpha * current + (1 - alpha) * current_filtered;
+
+            current_global = fabs(current_filtered);
+
+            ESP_LOGE(TAG, "Current: %f", current_global);
         }
     }
 }
@@ -77,8 +110,11 @@ void control_read(void *arg)
 void app_main()
 {
     esp_task_wdt_deinit();
-    init_led();set_throttle();set_pwm();
-    init_isr();create_tasks();
+    init_led();
+    set_throttle();
+    set_pwm();
+    init_isr();
+    create_tasks();
     ph_count = gpio_get_level(HALL_PIN[0]) | gpio_get_level(HALL_PIN[1]) << 1 | gpio_get_level(HALL_PIN[2]) << 2;
     set_duty(0, 0, 0, 0, 0, 0); // Inicializa con duty 0
 }
