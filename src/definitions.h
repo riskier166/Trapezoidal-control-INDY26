@@ -13,40 +13,45 @@
 #include "esp_task_wdt.h"
 #include "math.h"
 
-//Control
-float reference = 0.0, measurement = 0.0, u = 0, error = 0.0; // control variables 
-float PI_texas [2] = {13.143269,22783.72239}; // Coeficientes P:13.143269, I:22783.72239
-float PI_R100 [2] = {15.0, 500.0}; // Coeficientes P:20.0, I:500.0
+// polling
+int last_time = 0, interval = 1000; // 1 ms interval
+
+// Current stuff
+static int last_valid = 2180;
+static float current_filtered = 0.0;
+const float alpha = 0.2;
+
+// Control
+float reference = 0.0, measurement = 0.0, u = 0, error = 0.0; // control variables
+float PI_texas[2] = {13.143269, 22783.72239};                 // Coeficientes P:13.143269, I:22783.72239
+float PI_R100[2] = {15.0, 500.0};                             // Coeficientes P:20.0, I:500.0
 volatile float current, raw = 0, current_global = 0, current_channel;
 // PI
-float prev_error=0, integral=0;
-int dt = 1000 / 1000000; // convertir a segundos 
+float prev_error = 0, integral = 0;
+int dt = 1000 / 1000000;       // convertir a segundos
 float current_reference = 2.5; // 2 Ampere de referencia
 
 // GPIO declarations
-gpio_num_t LED_G = GPIO_NUM_16; // Indicator LED pin
-const int8_t adc_throttle = 4; // Throttle ADC pin
+gpio_num_t LED_G = GPIO_NUM_16;                                    // Indicator LED pin
+const int8_t adc_throttle = 4;                                     // Throttle ADC pin
 const int8_t CH = 33, CL = 32, BH = 26, BL = 25, AH = 14, AL = 27; // PWM pins rectificados
-const int8_t HALL_PIN[3] = {17, 18, 19}; // Hall sensor pins
+const int8_t HALL_PIN[3] = {17, 18, 19};                           // Hall sensor pins
 
 // Help Variables
 volatile int ph_count = 0; // Hall sensors state
 
-// RPM's calculation 
+// RPM's calculation
 int rpm_count = 0;
 float rpm = 0; // Pshase count and RPM count
 float TexCoeff = 240.0, RKV_Coeff = 1260.0;
 
 // PWM
-float adc_value = 0.0; // ADC Throttle
-float duty = 40.0; // Duty cycle
+float adc_value = 0.0;   // ADC Throttle
+float duty = 40.0;       // Duty cycle
 int deadTime_ticks = 64; // 64 ticks = 400 ns
 
-//Currents
+// Currents
 volatile float currentA, currentB, currentC, gen_current; // Current readings for each phase
-
-//polling 
-int last_time = 0, interval = 1000; // 1 ms interval 
 
 esp_err_t set_pwm()
 {
@@ -99,7 +104,7 @@ esp_err_t set_pwm()
     return ESP_OK;
 }
 
-//Función para actualizar los duty cycles
+// Función para actualizar los duty cycles
 void set_duty(float AH, float AL, float BH, float BL, float CH, float CL)
 {
     mcpwm_set_duty(MCPWM_UNIT_0, MCPWM_TIMER_2, MCPWM_GEN_A, AH); // Fase AH
@@ -111,7 +116,7 @@ void set_duty(float AH, float AL, float BH, float BL, float CH, float CL)
 }
 
 // ADC2 throttle reading function
-esp_err_t read_throttle(uint16_t *value) 
+esp_err_t read_throttle(uint16_t *value)
 {
     float raw = 0;
 
@@ -130,7 +135,7 @@ esp_err_t read_throttle(uint16_t *value)
 
 esp_err_t read_current()
 {
-    adc1_config_width(ADC_WIDTH_BIT_12); // Resolución de 12 bits
+    adc1_config_width(ADC_WIDTH_BIT_12);                        // Resolución de 12 bits
     adc1_config_channel_atten(ADC1_CHANNEL_0, ADC_ATTEN_DB_12); // GPIO36, fase A
     adc1_config_channel_atten(ADC1_CHANNEL_3, ADC_ATTEN_DB_12); // GPIO39, fase B
     adc1_config_channel_atten(ADC1_CHANNEL_6, ADC_ATTEN_DB_12); // GPIO34, fase C
@@ -153,6 +158,36 @@ esp_err_t set_throttle(void)
     return ret;
 }
 
+float get_currents()
+{
+    // oversampling pa quitarle ruido a esta shit
+    int sum = 0;
+    for (int i = 0; i < 4; i++)
+    {
+        sum += adc1_get_raw(current_channel);
+    }
+    int raw = sum / 4;
+
+    // clamp x si acaso xd
+    if (raw < 1800 || raw > 2600)
+    {
+        raw = last_valid;
+    }
+    else
+    {
+        last_valid = raw;
+    }
+
+    float Vout = (raw / 4095.0) * 3.3;
+    float Vsense = (Vout - 1.75) / 20.0;
+    float current = Vsense / 0.001;
+
+    // filtro coqueto
+    current_filtered = alpha * current + (1 - alpha) * current_filtered;
+
+    return fabs(current_filtered);
+}
+
 float PID_calc(float error, float Kp, float Ki, float dt)
 {
     float U;
@@ -164,8 +199,10 @@ float PID_calc(float error, float Kp, float Ki, float dt)
     integral += error * dt;
 
     // Clamp de integral
-    if (integral > 5.0) integral = 5.0;
-    if (integral < -5.0) integral = -5.0;
+    if (integral > 5.0)
+        integral = 5.0;
+    if (integral < -5.0)
+        integral = -5.0;
 
     float I = Ki * integral;
 
@@ -175,5 +212,3 @@ float PID_calc(float error, float Kp, float Ki, float dt)
 }
 
 #endif // __DEFINITIONS_H__
-
-

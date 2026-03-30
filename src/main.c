@@ -60,10 +60,6 @@ void main_comm(void *arg)
 
 void control_read(void *arg)
 {
-    static int last_valid = 2180;
-    static float current_filtered = 0.0;
-    const float alpha = 0.2;
-
     while (1)
     {
         int64_t current_time = esp_timer_get_time();
@@ -72,39 +68,9 @@ void control_read(void *arg)
         {
             last_time = current_time;
 
-            // pequeño delay para evitar switching noise
-            esp_rom_delay_us(2);
-
-            // oversampling
-            int sum = 0;
-            for (int i = 0; i < 4; i++) // puedes bajar a 4 para aligerar
-            {
-                sum += adc1_get_raw(current_channel);
-            }
-            int raw = sum / 4;
-
-            // clamp
-            if (raw < 1800 || raw > 2600)
-            {
-                raw = last_valid;
-            }
-            else
-            {
-                last_valid = raw;
-            }
-
-            float Vout = (raw / 4095.0) * 3.3;
-            float Vsense = (Vout - 1.75) / 20.0;
-            float current = Vsense / 0.001;
-
-            // filtro
-            current_filtered = alpha * current + (1 - alpha) * current_filtered;
-
-            current_global = fabs(current_filtered);
-
             float dt = interval / 1000000.0;
 
-            measurement = current_global;
+            measurement = get_currents();
 
             error = current_reference - measurement;
 
@@ -116,7 +82,7 @@ void control_read(void *arg)
             if (u < 5.0)
                 u = 5.0;
 
-            ESP_LOGE(TAG, "Current: %f", current_global);
+            ESP_LOGE(TAG, "Current: %f", get_currents());
         }
     }
 }
