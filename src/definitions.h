@@ -19,6 +19,7 @@
 float reference = 0.0, measurement = 0.0, u = 0, error = 0.0; // control variables 
 float PI_texas [2] = {13.143269,22783.72239}; // Coeficientes P:13.143269, I:22783.72239
 volatile float current, raw = 0, current_global = 0, current_channel;
+float prev_error=0, integral=0;
 
 // GPIO declarations
 gpio_num_t LED_G = GPIO_NUM_16; // Indicator LED pin
@@ -150,13 +151,24 @@ esp_err_t set_throttle(void)
     return ret;
 }
 
-float PID_calc(float error, float Kp, float ki, int dt) // dt=interval
+float PID_calc(float error, float Kp, float Ki, float dt)
 {
-    float prev_error=0, integral=0;
-    float U=Kp*error;
-    integral+=((float)dt/2)*(error+prev_error);
-    U+=ki*integral;
-    prev_error=error;
+    float U;
+
+    // Proporcional
+    float P = Kp * error;
+
+    // Integral con anti-windup
+    integral += error * dt;
+
+    // Clamp de integral
+    if (integral > 5.0) integral = 5.0;
+    if (integral < -5.0) integral = -5.0;
+
+    float I = Ki * integral;
+
+    U = P + I;
+
     return U;
 }
 

@@ -25,32 +25,32 @@ void main_comm(void *arg)
             switch (local_ph)
             {
             case 4: // AH, BL → medir A
-                set_duty(duty, 0, 0, duty, 0, 0);
+                set_duty(u, 0, 0, u, 0, 0);
                 current_channel = ADC1_CHANNEL_0;
                 break;
 
             case 6: // BL, CH → medir C
-                set_duty(0, 0, 0, duty, duty, 0);
+                set_duty(0, 0, 0, u, u, 0);
                 current_channel = ADC1_CHANNEL_6;
                 break;
 
             case 2: // CH, AL → medir C
-                set_duty(0, duty, 0, 0, duty, 0);
+                set_duty(0, u, 0, 0, u, 0);
                 current_channel = ADC1_CHANNEL_6;
                 break;
 
             case 3: // BH, AL → medir B
-                set_duty(0, duty, duty, 0, 0, 0);
+                set_duty(0, u, u, 0, 0, 0);
                 current_channel = ADC1_CHANNEL_3;
                 break;
 
             case 1: // BH, CL → medir B
-                set_duty(0, 0, duty, 0, 0, duty);
+                set_duty(0, 0, u, 0, 0, u);
                 current_channel = ADC1_CHANNEL_3;
                 break;
 
             case 5: // AH, CL → medir A
-                set_duty(duty, 0, 0, 0, 0, duty);
+                set_duty(u, 0, 0, 0, 0, u);
                 current_channel = ADC1_CHANNEL_0;
                 break;
             }
@@ -101,6 +101,11 @@ void control_read(void *arg)
             current_filtered = alpha * current + (1 - alpha) * current_filtered;
 
             current_global = fabs(current_filtered);
+
+            //reference = REF_TEXAS; // Posteriormente cambiar por adc_value
+            measurement = current_global;
+            error = 1 - measurement;
+            u = PID_calc(error,PI_texas[0],PI_texas[1],interval);
 
             ESP_LOGE(TAG, "Current: %f", current_global);
         }
