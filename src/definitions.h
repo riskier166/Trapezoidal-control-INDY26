@@ -13,23 +13,36 @@
 #include "esp_task_wdt.h"
 #include "math.h"
 
-// polling
-int last_time = 0, interval = 1000; // 1 ms interval
+// polling & time dependances for control loop
+int last_time = 0, interval = 100; // 1000us CURRENTinterval
+
+// Velocity stuff
+float rpm_measurement = 0; // RPM count
 
 // Current stuff
 static int last_valid = 2180;
 static float current_filtered = 0.0;
-const float alpha = 0.2;
+const float alpha = 0.025; // Antes: 0.05
+volatile float current_measurement = 0.0;
+volatile adc1_channel_t current_channel;
+// Currents
+volatile float currentA, currentB, currentC, gen_current; // Current readings for each phase
 
 // Control
-float reference = 0.0, measurement = 0.0, u = 0, error = 0.0; // control variables
-float PI_texas[2] = {13.143269, 22783.72239};                 // Coeficientes P:13.143269, I:22783.72239
-float PI_R100[2] = {20.0, 400.0};                             // Coeficientes P:10.0, I:500.0
-volatile float current, raw = 0, current_global = 0, current_channel;
+float current_reference = 2, c_u = 0, c_error = 0.0;    // CURRENT control variables
+float velocity_reference = 2, v_u = 0, v_error = 0.0;    // VELOCITY control variables
+float PI_current[2] = {0.103672557, 160.221225}; // Coeficientes P:10.0, I:500.0
+float PI_velocity[2] = {0.078709, 0.0049378}; // Coeficientes P:10.0, I:500.0
+volatile float current, raw = 0, current_global = 0;
 // PI
 float prev_error = 0, integral = 0;
-int dt = 1000 / 1000000;       // convertir a segundos
-float current_reference = 2.3; // 2 Ampere de referencia ////////////////////////////////////////
+
+// Help Variables
+volatile int ph_count = 0; // Hall sensors state
+// PWM
+volatile int adc_value = 0;
+float duty = 40.0;       // Duty cycle vars
+int deadTime_ticks = 64; // 64 ticks = 400 ns
 
 // GPIO declarations
 gpio_num_t LED_G = GPIO_NUM_16;                                    // Indicator LED pin
@@ -37,21 +50,13 @@ const int8_t adc_throttle = 4;                                     // Throttle A
 const int8_t CH = 33, CL = 32, BH = 26, BL = 25, AH = 14, AL = 27; // PWM pins rectificados
 const int8_t HALL_PIN[3] = {17, 18, 19};                           // Hall sensor pins
 
-// Help Variables
-volatile int ph_count = 0; // Hall sensors state
-
 // RPM's calculation
 int rpm_count = 0;
 float rpm = 0; // Pshase count and RPM count
 float TexCoeff = 240.0, RKV_Coeff = 1260.0;
 
-// PWM
-float adc_value = 0.0;   // ADC Throttle
-float duty = 40.0;       // Duty cycle
-int deadTime_ticks = 64; // 64 ticks = 400 ns
+float raw_A, raw_B, raw_C;
 
-// Currents
-volatile float currentA, currentB, currentC, gen_current; // Current readings for each phase
 
 esp_err_t set_pwm()
 {
@@ -118,7 +123,7 @@ void set_duty(float AH, float AL, float BH, float BL, float CH, float CL)
 // ADC2 throttle reading function
 esp_err_t read_throttle(uint16_t *value)
 {
-    float raw = 0;
+    int raw = 0;
 
     esp_err_t ret = adc2_get_raw(
         ADC2_CHANNEL_0,
@@ -127,7 +132,7 @@ esp_err_t read_throttle(uint16_t *value)
 
     if (ret == ESP_OK)
     {
-        *value = (float)raw * 100.00 / 4095.00; // convert to percentage
+        *value = (uint16_t)raw * 307.00 / 4095.00; // convert to percentage
     }
 
     return ret;
@@ -162,30 +167,38 @@ float get_currents()
 {
     // promedio pa quitarle ruido a esta shit
     int sum = 0;
-    for (int i = 0; i < 4; i++)
+    for (int i = 0; i < 10; i++)
     {
         sum += adc1_get_raw(current_channel);
     }
-    int raw = sum / 4;
+    int raw = sum / 10;
+    
+    float Vout = 0.0;
 
-    // clamp x si acaso xd
-    if (raw < 1800 || raw > 2600)
-    {
-        raw = last_valid;
-    }
-    else
-    {
-        last_valid = raw;
-    }
+    if (current_channel == ADC1_CHANNEL_0)
+        Vout = ((raw-raw_A)/ (4095.0)) * 3.3;
+    else if (current_channel == ADC1_CHANNEL_3)
+        Vout = ((raw-raw_B)/ (4095.0)) * 3.3;
+    else if (current_channel == ADC1_CHANNEL_6)
+        Vout = ((raw-raw_C)/ (4095.0)) * 3.3;
 
-    float Vout = (raw / 4095.0) * 3.3;
-    float Vsense = (Vout - 1.75) / 20.0;
+    float Vsense = (Vout) / 20.0;
     float current = Vsense / 0.001;
 
+    current = current * (duty / 100.0 + 0.133); // Compensación por duty cycle *15 funcionó chido*
+
     // filtro coqueto
-    current_filtered = alpha * current + (1 - alpha) * current_filtered;
+    current_filtered = (alpha * current + (1 - alpha) * current_filtered);
 
     return fabs(current_filtered);
+}
+
+float get_rpms()
+{
+    rpm = ((rpm_count * 60000) / RKV_Coeff);
+    //rpm = rpm_count * 4761.9;
+    rpm_count = 0; // Reset RPM count every interval
+    return rpm;
 }
 
 float PID_calc(float error, float Kp, float Ki, float dt)
@@ -197,12 +210,6 @@ float PID_calc(float error, float Kp, float Ki, float dt)
 
     // Integral con anti-windup
     integral += error * dt;
-
-    // Clamp de integral xddd
-    if (integral > 5.0)
-        integral = 5.0;
-    if (integral < -5.0)
-        integral = -5.0;
 
     float I = Ki * integral;
 

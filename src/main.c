@@ -13,7 +13,6 @@ void isr_phase(void *arg)
 void main_comm(void *arg)
 {
     int last_ph = -1;
-
     while (true)
     {
         int local_ph = ph_count;
@@ -25,32 +24,32 @@ void main_comm(void *arg)
             switch (local_ph)
             {
             case 4: // AH, BL → medir A
-                set_duty(u, 0, 0, u, 0, 0);
+                set_duty(c_u, 0, 0, c_u, 0, 0);
                 current_channel = ADC1_CHANNEL_0;
                 break;
 
             case 6: // BL, CH → medir C
-                set_duty(0, 0, 0, u, u, 0);
+                set_duty(0, 0, 0, c_u, c_u, 0);
                 current_channel = ADC1_CHANNEL_6;
                 break;
 
             case 2: // CH, AL → medir C
-                set_duty(0, u, 0, 0, u, 0);
+                set_duty(0, c_u, 0, 0, c_u, 0);
                 current_channel = ADC1_CHANNEL_6;
                 break;
 
             case 3: // BH, AL → medir B
-                set_duty(0, u, u, 0, 0, 0);
+                set_duty(0, c_u, c_u, 0, 0, 0);
                 current_channel = ADC1_CHANNEL_3;
                 break;
 
             case 1: // BH, CL → medir B
-                set_duty(0, 0, u, 0, 0, u);
+                set_duty(0, 0, c_u, 0, 0, c_u);
                 current_channel = ADC1_CHANNEL_3;
                 break;
 
             case 5: // AH, CL → medir A
-                set_duty(u, 0, 0, 0, 0, u);
+                set_duty(c_u, 0, 0, 0, 0, c_u);
                 current_channel = ADC1_CHANNEL_0;
                 break;
             }
@@ -58,7 +57,7 @@ void main_comm(void *arg)
     }
 }
 
-void control_read(void *arg)
+void current_control(void *arg)
 {
     while (1)
     {
@@ -66,20 +65,20 @@ void control_read(void *arg)
 
         if ((current_time - last_time) >= interval)
         {
+
             last_time = current_time;
 
-            // Calcular error y aplicar PI
-            float dt = interval / 1000000.0;
-            measurement = get_currents();
-            error = current_reference - measurement;
-            u = PID_calc(error, PI_R100[0], PI_R100[1], dt);
-            // saturación
-            if (u > 95.0)
-                u = 95.0;
-            if (u < 5.0)
-                u = 5.0;
+            // Current control applied
+            current_measurement = get_currents();
+            c_error = current_reference - current_measurement;
+            c_u = PID_calc(c_error, PI_current[0], PI_current[1], interval / 1000000.0);
+            // Saturación V_U
+            if (c_u > 95.0)
+                c_u = 95.0;
+            if (c_u < 0.0)
+                c_u = 0.0;
 
-            ESP_LOGE(TAG, "Current: %f", get_currents());
+            ESP_LOGW(TAG, "current: %f", get_currents());
         }
     }
 }
@@ -87,13 +86,22 @@ void control_read(void *arg)
 void app_main()
 {
     esp_task_wdt_deinit();
+    for (int i = 0; i < 50; i++)
+    {
+        raw_A += adc1_get_raw(ADC1_CHANNEL_0);
+        raw_B += adc1_get_raw(ADC1_CHANNEL_3);
+        raw_C += adc1_get_raw(ADC1_CHANNEL_6);
+    }
+    raw_A = raw_A / 50;
+    raw_B = raw_B / 50;
+    raw_C = raw_C / 50;
     init_led();
     set_throttle();
     set_pwm();
     init_isr();
     create_tasks();
     ph_count = gpio_get_level(HALL_PIN[0]) | gpio_get_level(HALL_PIN[1]) << 1 | gpio_get_level(HALL_PIN[2]) << 2;
-    set_duty(0, 0, 0, 0, 0, 0); // Inicializa con duty 0
+    // set_duty(0, 0, 0, 0, 0, 0); // Inicializa con duty 0
 }
 
 esp_err_t init_isr()
@@ -129,8 +137,8 @@ esp_err_t create_tasks()
                 &ucParameterToPass,
                 1,
                 &xHandle);
-    xTaskCreate(control_read,
-                "Control Read",
+    xTaskCreate(current_control,
+                "Current Control",
                 4096,
                 &ucParameterToPass,
                 2,
