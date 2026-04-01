@@ -8,68 +8,77 @@ void isr_phase(void *arg)
 {
     ph_count = gpio_get_level(HALL_PIN[0]) | gpio_get_level(HALL_PIN[1]) << 1 | gpio_get_level(HALL_PIN[2]) << 2;
     rpm_count++;
+    int64_t now = esp_timer_get_time();
+    hall_dt = now - last_hall_time;
+    last_hall_time = now;
 }
 
 void main_comm(void *arg)
 {
+    int last_ph = -1;
     while (true)
     {
-        switch (ph_count)
+        int local_ph = ph_count;
+
+        if (local_ph != last_ph)
         {
-        case 4:
-            set_duty(u, 0, 0, u, 0, 0); // Fase AH, BL
-            // currentA = gen_current;
-            break;
-        case 6:
-            set_duty(0, 0, 0, u, u, 0); // Fase BL, CH
-            // currentC = gen_current;
-            break;
-        case 2:
-            set_duty(0, u, 0, 0, u, 0); // Fase CH, AL
-            // currentC = gen_current;
-            break;
-        case 3:
-            set_duty(0, u, u, 0, 0, 0); // Fase BH, AL
-            // currentB = gen_current;
-            break;
-        case 1:
-            set_duty(0, 0, u, 0, 0, u); // Fase BH, CL
-            // currentB = gen_current;
-            break;
-        case 5:
-            set_duty(u, 0, 0, 0, 0, u); // Fase AH, CL
-            // currentA = gen_current;
-            break;
+            last_ph = local_ph;
+
+            switch (local_ph)
+            {
+            case 4: // AH, BL → medir A
+                set_duty(v_u, 0, 0, v_u, 0, 0);
+                current_channel = ADC1_CHANNEL_0;
+                break;
+
+            case 6: // BL, CH → medir C
+                set_duty(0, 0, 0, v_u, v_u, 0);
+                current_channel = ADC1_CHANNEL_6;
+                break;
+
+            case 2: // CH, AL → medir C
+                set_duty(0, v_u, 0, 0, v_u, 0);
+                current_channel = ADC1_CHANNEL_6;
+                break;
+
+            case 3: // BH, AL → medir B
+                set_duty(0, v_u, v_u, 0, 0, 0);
+                current_channel = ADC1_CHANNEL_3;
+                break;
+
+            case 1: // BH, CL → medir B
+                set_duty(0, 0, v_u, 0, 0, v_u);
+                current_channel = ADC1_CHANNEL_3;
+                break;
+
+            case 5: // AH, CL → medir A
+                set_duty(v_u, 0, 0, 0, 0, v_u);
+                current_channel = ADC1_CHANNEL_0;
+                break;
+            }
         }
     }
 }
 
 void control_read(void *arg)
 {
-
     while (1)
     {
         int64_t current_time = esp_timer_get_time();
-
         if ((current_time - last_time) >= interval)
         {
             last_time = current_time;
-            //read_throttle(&adc_value);
-            if (rpm_count > 0)
-            {
-                rpm = (rpm_count * 60000.0) / (TexCoeff);  
-            }
-            else
-            {
-                rpm = 0.0;
-            }
-            rpm_count = 0; // Reset RPM count every interval
-            reference = REF_TEXAS; // Posteriormente cambiar por adc_value
-            measurement = rpm;
-            error = reference - measurement;
-            u = PID_calc(error,PI_texas[0],PI_texas[1],interval);
-            
-            ESP_LOGI(TAG, "DUTY: %f, RPM's: %f Reference: %f\n", adc_value, rpm, reference);
+            // Applied velocity control
+            rpm = get_rpms();
+            v_error = velocity_reference - rpm;
+            v_u = PID_calc(v_error, PI_velocity[0], PI_velocity[1], interval / 1000000.0);
+            // Saturación V_U
+            if (v_u > 95.0)
+                v_u = 95.0;
+            if (v_u < 0.0)
+                v_u = 0.0;
+
+            ESP_LOGI(TAG, "RPM's filtered: %lld, Duty: %f\n", rpm, v_u);
         }
     }
 }
@@ -77,8 +86,11 @@ void control_read(void *arg)
 void app_main()
 {
     esp_task_wdt_deinit();
-    init_led();set_throttle();set_pwm();
-    init_isr();create_tasks();
+    init_led();
+    set_throttle();
+    set_pwm();
+    init_isr();
+    create_tasks();
     ph_count = gpio_get_level(HALL_PIN[0]) | gpio_get_level(HALL_PIN[1]) << 1 | gpio_get_level(HALL_PIN[2]) << 2;
     set_duty(0, 0, 0, 0, 0, 0); // Inicializa con duty 0
 }
