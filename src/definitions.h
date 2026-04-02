@@ -35,8 +35,9 @@ float raw_A, raw_B, raw_C;
 volatile float currentA, currentB, currentC, gen_current; // Current readings for each phase
 
 // Control
-float current_reference = 1.5, c_u = 0.0, c_error = 0.0;    // CURRENT control variables
-float velocity_reference = 2500.0, v_u = 0.0, v_error = 0.0; // VELOCITY control variables
+float current_reference = 1.5;
+float c_u = 0.0, c_error = 0.0;    // CURRENT control variables
+float velocity_reference = 300.0, v_u = 0.0, v_error = 0.0; // VELOCITY control variables
 float PI_current[2] = {0.103672557, 160.221225};            // Coeficientes P:10.0, I:500.0
 float PI_velocity[2] = {0.20464, 0.25677};                  // Coeficientes P:10.0, I:500.0
 volatile float current, raw = 0, current_global = 0;
@@ -122,7 +123,6 @@ void set_duty(float AH, float AL, float BH, float BL, float CH, float CL)
 esp_err_t read_throttle(uint16_t *value)
 {
     int raw = 0;
-
     esp_err_t ret = adc2_get_raw(
         ADC2_CHANNEL_0,
         ADC_WIDTH_BIT_12,
@@ -130,7 +130,7 @@ esp_err_t read_throttle(uint16_t *value)
 
     if (ret == ESP_OK)
     {
-        *value = (uint16_t)raw * 307.00 / 4095.00; // convert to percentage
+        *value = (uint16_t)raw * 2523.00 / 4095.00; // convert to percentage
     }
 
     return ret;

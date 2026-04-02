@@ -71,11 +71,13 @@ void current_control(void *arg)
 
             last_time = current_time;
 
+            // Lecturas
+            read_throttle(&adc_value);
             rpm = get_rpms();
             current_measurement = get_currents();
 
             // Velocity control applied
-            v_error = velocity_reference - rpm;
+            v_error = adc_value - rpm;
             v_u = PID_calc(v_error, PI_velocity[0], PI_velocity[1], interval / 1000000.0, false);
             // Saturación V_U
             if (v_u > 5.0)
@@ -92,7 +94,7 @@ void current_control(void *arg)
             else if (c_u < 0.0)
                 c_u = 0.0;
 
-            ESP_LOGW(TAG, "current: %f, rpm: %lld, DUTY: %f \n", current_measurement, rpm, c_u);
+            ESP_LOGW(TAG, "current: %f, rpm: %lld, DUTY: %f, Desired rpm's: %d\n", current_measurement, rpm, c_u, adc_value);
         }
     }
 }
