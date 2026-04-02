@@ -37,7 +37,7 @@ volatile float currentA, currentB, currentC, gen_current; // Current readings fo
 float current_reference = 2, c_u = 0, c_error = 0.0;       // CURRENT control variables
 float velocity_reference = 500.0, v_u = 0, v_error = 0.0; // VELOCITY control variables
 float PI_current[2] = {0.103672557, 160.221225};           // Coeficientes P:10.0, I:500.0
-float PI_velocity[2] = {0.45651, 0.21193};              // Coeficientes P:10.0, I:500.0
+float PI_velocity[2] = {0.20464, 0.25677};              // Coeficientes P:10.0, I:500.0
 volatile float current, raw = 0, current_global = 0;
 // PI
 float prev_error = 0, integral = 0;
