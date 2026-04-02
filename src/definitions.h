@@ -48,7 +48,7 @@ float prev_error = 0, integral = 0;
 volatile int ph_count = 0; // Hall sensors state
 // PWM
 volatile int adc_value = 0;
-float duty = 40.0;       // Duty cycle vars
+float duty = 25.0;       // Duty cycle vars
 int deadTime_ticks = 64; // 64 ticks = 400 ns
 
 // GPIO declarations
@@ -130,8 +130,9 @@ esp_err_t read_throttle(uint16_t *value)
 
     if (ret == ESP_OK)
     {
-        *value = (uint16_t)raw * 2523.00 / 4095.00; // convert to percentage
+        *value = ((((uint16_t)raw)) * 2523.00 / 4095.00)-560; // convert to percentage
     }
+    if (*value > 1330) *value = 0; // Clamp
 
     return ret;
 }
