@@ -17,22 +17,28 @@
 int last_time = 0, interval = 100; // 1000us CURRENTinterval
 
 // Velocity stuff
-float rpm_measurement = 0; // RPM count
+int rpm_count = 0;
+int64_t rpm = 0; // Pshase count and RPM count
+int64_t rpm_filtered = 0;
+float RKV_Coeff = 126.0;
+volatile int64_t last_hall_time = 0;
+volatile int64_t hall_dt = 0;
+const float alpha_v = 0.2; // Filtro para RPM
 
 // Current stuff
-static int last_valid = 2180;
 static float current_filtered = 0.0;
-const float alpha = 0.025; // Antes: 0.05
+const float alpha_c = 0.025; // Antes: 0.05
 volatile float current_measurement = 0.0;
 volatile adc1_channel_t current_channel;
+float raw_A, raw_B, raw_C;
 // Currents
 volatile float currentA, currentB, currentC, gen_current; // Current readings for each phase
 
 // Control
-float current_reference = 2, c_u = 0, c_error = 0.0;    // CURRENT control variables
-float velocity_reference = 2, v_u = 0, v_error = 0.0;    // VELOCITY control variables
-float PI_current[2] = {0.103672557, 160.221225}; // Coeficientes P:10.0, I:500.0
-float PI_velocity[2] = {0.078709, 0.0049378}; // Coeficientes P:10.0, I:500.0
+float current_reference = 1.5, c_u = 0.0, c_error = 0.0;    // CURRENT control variables
+float velocity_reference = 2500.0, v_u = 0.0, v_error = 0.0; // VELOCITY control variables
+float PI_current[2] = {0.103672557, 160.221225};            // Coeficientes P:10.0, I:500.0
+float PI_velocity[2] = {0.20464, 0.25677};                  // Coeficientes P:10.0, I:500.0
 volatile float current, raw = 0, current_global = 0;
 // PI
 float prev_error = 0, integral = 0;
@@ -49,14 +55,6 @@ gpio_num_t LED_G = GPIO_NUM_16;                                    // Indicator 
 const int8_t adc_throttle = 4;                                     // Throttle ADC pin
 const int8_t CH = 33, CL = 32, BH = 26, BL = 25, AH = 14, AL = 27; // PWM pins rectificados
 const int8_t HALL_PIN[3] = {17, 18, 19};                           // Hall sensor pins
-
-// RPM's calculation
-int rpm_count = 0;
-float rpm = 0; // Pshase count and RPM count
-float TexCoeff = 240.0, RKV_Coeff = 1260.0;
-
-float raw_A, raw_B, raw_C;
-
 
 esp_err_t set_pwm()
 {
@@ -172,15 +170,15 @@ float get_currents()
         sum += adc1_get_raw(current_channel);
     }
     int raw = sum / 10;
-    
+
     float Vout = 0.0;
 
     if (current_channel == ADC1_CHANNEL_0)
-        Vout = ((raw-raw_A)/ (4095.0)) * 3.3;
+        Vout = ((raw - raw_A) / (4095.0)) * 3.3;
     else if (current_channel == ADC1_CHANNEL_3)
-        Vout = ((raw-raw_B)/ (4095.0)) * 3.3;
+        Vout = ((raw - raw_B) / (4095.0)) * 3.3;
     else if (current_channel == ADC1_CHANNEL_6)
-        Vout = ((raw-raw_C)/ (4095.0)) * 3.3;
+        Vout = ((raw - raw_C) / (4095.0)) * 3.3;
 
     float Vsense = (Vout) / 20.0;
     float current = Vsense / 0.001;
@@ -188,32 +186,72 @@ float get_currents()
     current = current * (duty / 100.0 + 0.133); // Compensación por duty cycle *15 funcionó chido*
 
     // filtro coqueto
-    current_filtered = (alpha * current + (1 - alpha) * current_filtered);
+    current_filtered = (alpha_c * current + (1 - alpha_c) * current_filtered);
 
     return fabs(current_filtered);
 }
 
 float get_rpms()
 {
-    rpm = ((rpm_count * 60000) / RKV_Coeff);
-    //rpm = rpm_count * 4761.9;
-    rpm_count = 0; // Reset RPM count every interval
-    return rpm;
+    float rpm_local;
+    static int64_t last_dt = 0;
+
+    if (hall_dt > 0)
+    {
+        rpm_local = (60.0 * 1000000.0) / (hall_dt * RKV_Coeff);
+    }
+    else
+    {
+        rpm_local = 0.0;
+    }
+
+    if (hall_dt != last_dt)
+    {
+        rpm_filtered = alpha_v * rpm_local + (1 - alpha_v) * rpm_filtered;
+        last_dt = hall_dt;
+    }
+
+    return rpm_filtered;
 }
 
-float PID_calc(float error, float Kp, float Ki, float dt)
+float PID_calc(float error, float Kp, float Ki, float dt, bool type)
 {
     float U;
 
-    // Proporcional
     float P = Kp * error;
 
-    // Integral con anti-windup
-    integral += error * dt;
-
-    float I = Ki * integral;
+    // Propuesta de integral
+    float integral_candidate = integral + error * dt;
+    float I = Ki * integral_candidate;
 
     U = P + I;
+
+    if (!type) // Si es control de velocidad, no le sumes la integral si saturó
+    {
+        // Clamp
+        if (U > 5.0f)
+        {
+            U = 5.0f;
+        }
+        else if (U < 0.0f)
+        {
+            U = 0.0f;
+        }
+    }
+    else // Si es control de corriente, siempre sumale la integral (porque es más crítico)
+    {
+        integral = integral_candidate;
+
+        // Clamp
+        if (U > 95.0f)
+        {
+            U = 95.0f;
+        }
+        else if (U < 0.0f)
+        {
+            U = 0.0f;
+        }
+    }
 
     return U;
 }

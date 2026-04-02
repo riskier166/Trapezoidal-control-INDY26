@@ -8,6 +8,9 @@ void isr_phase(void *arg)
 {
     ph_count = gpio_get_level(HALL_PIN[0]) | gpio_get_level(HALL_PIN[1]) << 1 | gpio_get_level(HALL_PIN[2]) << 2;
     rpm_count++;
+    int64_t now = esp_timer_get_time();
+    hall_dt = now - last_hall_time;
+    last_hall_time = now;
 }
 
 void main_comm(void *arg)
@@ -68,17 +71,28 @@ void current_control(void *arg)
 
             last_time = current_time;
 
-            // Current control applied
+            rpm = get_rpms();
             current_measurement = get_currents();
-            c_error = current_reference - current_measurement;
-            c_u = PID_calc(c_error, PI_current[0], PI_current[1], interval / 1000000.0);
+
+            // Velocity control applied
+            v_error = velocity_reference - rpm;
+            v_u = PID_calc(v_error, PI_velocity[0], PI_velocity[1], interval / 1000000.0, false);
+            // Saturación V_U
+            if (v_u > 5.0)
+                v_u = 5.0;
+            else if (v_u < 0.0)
+                v_u = 0.0;
+
+            // Current control applied
+            c_error = v_u - current_measurement;
+            c_u = PID_calc(c_error, PI_current[0], PI_current[1], interval / 1000000.0, true);
             // Saturación V_U
             if (c_u > 95.0)
                 c_u = 95.0;
-            if (c_u < 0.0)
+            else if (c_u < 0.0)
                 c_u = 0.0;
 
-            ESP_LOGW(TAG, "current: %f", get_currents());
+            ESP_LOGW(TAG, "current: %f, rpm: %lld, DUTY: %f \n", current_measurement, rpm, c_u);
         }
     }
 }
