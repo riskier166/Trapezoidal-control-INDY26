@@ -15,6 +15,7 @@
 
 // polling & time dependances for control loop
 int last_time = 0, interval = 100; // 1000us CURRENTinterval
+TaskHandle_t comm_task_handle = NULL;
 
 // Velocity stuff
 int rpm_count = 0;
@@ -26,8 +27,8 @@ volatile int64_t hall_dt = 0;
 const float alpha_v = 0.2; // Filtro para RPM
 
 // Current stuff
-static float current_filtered = 0.0;
-const float alpha_c = 0.025; // Antes: 0.05
+static float current_filtered= 0.0;
+const float alpha_c = 0.08; // Antes: 0.05
 volatile float current_measurement = 0.0;
 volatile adc1_channel_t current_channel;
 float raw_A, raw_B, raw_C;
@@ -35,8 +36,9 @@ float raw_A, raw_B, raw_C;
 volatile float currentA, currentB, currentC, gen_current; // Current readings for each phase
 
 // Control
-float current_reference = 1.5, velocity_reference = 100.0;
-float c_u = 0.0, c_error = 0.0;    // CURRENT control variables
+float current_reference = 1.5, velocity_reference = 500.0;
+volatile float c_u = 0.0;
+float c_error = 0.0;    // CURRENT control variables
 float v_u = 0.0, v_error = 0.0; // VELOCITY control variables
 float PI_current[2] = {0.103672557, 160.221225};            // Coeficientes P:10.0, I:500.0
 float PI_velocity[2] = {0.20464, 0.25677};                  // Coeficientes P:10.0, I:500.0
@@ -163,7 +165,7 @@ esp_err_t set_throttle(void)
     return ret;
 }
 
-float get_currents()
+float get_currents(float duty_reference)
 {
     // promedio pa quitarle ruido a esta shit
     int sum = 0;
@@ -185,7 +187,7 @@ float get_currents()
     float Vsense = (Vout) / 20.0;
     float current = Vsense / 0.001;
 
-    current = current * (c_u / 100.0 + 0.133); // Compensación por duty cycle *15 funcionó chido*
+    current = current * (duty_reference / 100.0 + 0.133); // Compensación por duty cycle *15 funcionó chido*
 
     // filtro coqueto
     current_filtered = (alpha_c * current + (1 - alpha_c) * current_filtered);
