@@ -27,33 +27,27 @@ void main_comm(void *arg)
             switch (local_ph)
             {
             case 4: // AH, BL → medir A
-                set_duty(c_u, 0, 0, c_u, 0, 0);
-                current_channel = ADC1_CHANNEL_0;
+                set_duty(c_u, 0, 0, c_u, 0, 0);current_channel = ADC1_CHANNEL_0;
                 break;
 
             case 6: // BL, CH → medir C
-                set_duty(0, 0, 0, c_u, c_u, 0);
-                current_channel = ADC1_CHANNEL_6;
+                set_duty(0, 0, 0, c_u, c_u, 0);current_channel = ADC1_CHANNEL_6;
                 break;
 
             case 2: // CH, AL → medir C
-                set_duty(0, c_u, 0, 0, c_u, 0);
-                current_channel = ADC1_CHANNEL_6;
+                set_duty(0, c_u, 0, 0, c_u, 0);current_channel = ADC1_CHANNEL_6;
                 break;
 
             case 3: // BH, AL → medir B
-                set_duty(0, c_u, c_u, 0, 0, 0);
-                current_channel = ADC1_CHANNEL_3;
+                set_duty(0, c_u, c_u, 0, 0, 0);current_channel = ADC1_CHANNEL_3;
                 break;
 
             case 1: // BH, CL → medir B
-                set_duty(0, 0, c_u, 0, 0, c_u);
-                current_channel = ADC1_CHANNEL_3;
+                set_duty(0, 0, c_u, 0, 0, c_u);current_channel = ADC1_CHANNEL_3;
                 break;
 
             case 5: // AH, CL → medir A
-                set_duty(c_u, 0, 0, 0, 0, c_u);
-                current_channel = ADC1_CHANNEL_0;
+                set_duty(c_u, 0, 0, 0, 0, c_u);current_channel = ADC1_CHANNEL_0;
                 break;
             }
         }
