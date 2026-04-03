@@ -36,22 +36,22 @@ void main_comm(void *arg)
 
         switch (local_ph)
         {
-            case 4: set_duty(duty, 0, 0, duty, 0, 0);
+            case 4: set_duty(c_u, 0, 0, c_u, 0, 0);
             current_channel = ADC1_CHANNEL_0; break;
 
-            case 6: set_duty(0, 0, 0, duty, duty, 0);
+            case 6: set_duty(0, 0, 0, c_u, c_u, 0);
             current_channel = ADC1_CHANNEL_6; break;
 
-            case 2: set_duty(0, duty, 0, 0, duty, 0);
+            case 2: set_duty(0, c_u, 0, 0, c_u, 0);
             current_channel = ADC1_CHANNEL_6; break;
 
-            case 3: set_duty(0, duty, duty, 0, 0, 0);
+            case 3: set_duty(0, c_u, c_u, 0, 0, 0);
             current_channel = ADC1_CHANNEL_3; break;
 
-            case 1: set_duty(0, 0, duty, 0, 0, duty);
+            case 1: set_duty(0, 0, c_u, 0, 0, c_u);
             current_channel = ADC1_CHANNEL_3; break;
 
-            case 5: set_duty(duty, 0, 0, 0, 0, duty);
+            case 5: set_duty(c_u, 0, 0, 0, 0, c_u);
             current_channel = ADC1_CHANNEL_0; break;
 
             default: set_duty(0, 0, 0, 0, 0, 0);break;
@@ -72,7 +72,7 @@ void current_control(void *arg)
         {
             last_time_local += current_interval;
 
-            current_measurement = get_currents(duty);
+            current_measurement = get_currents(c_u);
 
             c_error = v_u - current_measurement;
 
@@ -105,10 +105,10 @@ void velocity_control(void *arg)
         {
             last_time_local += speed_interval;
 
-            read_throttle(&adc_value);
+            //read_throttle(&adc_value);
             rpm = get_rpms();
 
-            v_error = adc_value - rpm;
+            v_error = velocity_reference - rpm;
 
             v_u = PID_calc(v_error,
                                    PI_velocity[0],
@@ -122,7 +122,7 @@ void velocity_control(void *arg)
             else if (v_u < 0.0f)
                 v_u = 0.0f;
 
-            ESP_LOGI(TAG, "Current: %f, RPM: %lld, duty: %f", current_measurement, rpm, duty);
+            ESP_LOGI(TAG, "Current: %f, RPM: %lld, duty: %f, Reference: %f", current_measurement, rpm, c_u, velocity_reference);
         }
     }
 }

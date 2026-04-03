@@ -36,8 +36,9 @@ float raw_A, raw_B, raw_C;
 volatile float currentA, currentB, currentC, gen_current; // Current readings for each phase
 
 // Control
-float current_reference = 1.5, velocity_reference = 100.0;
-float c_u = 0.0, c_error = 0.0;    // CURRENT control variables
+float current_reference = 1.5, velocity_reference = 500.0;
+volatile float c_u = 0.0;
+float c_error = 0.0;    // CURRENT control variables
 float v_u = 0.0, v_error = 0.0; // VELOCITY control variables
 float PI_current[2] = {0.103672557, 160.221225};            // Coeficientes P:10.0, I:500.0
 float PI_velocity[2] = {0.20464, 0.25677};                  // Coeficientes P:10.0, I:500.0
