@@ -4,89 +4,129 @@ esp_err_t init_isr(), create_tasks(); // Inicialización ISR's
 
 static const char *TAG = "main"; // prints
 
-void isr_phase(void *arg)
+void IRAM_ATTR isr_phase(void *arg)
 {
-    ph_count = gpio_get_level(HALL_PIN[0]) | gpio_get_level(HALL_PIN[1]) << 1 | gpio_get_level(HALL_PIN[2]) << 2;
-    rpm_count++;
+    ph_count = gpio_get_level(HALL_PIN[0]) |
+               (gpio_get_level(HALL_PIN[1]) << 1) |
+               (gpio_get_level(HALL_PIN[2]) << 2);
+
     int64_t now = esp_timer_get_time();
     hall_dt = now - last_hall_time;
     last_hall_time = now;
+
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    if (comm_task_handle != NULL)
+    {
+        vTaskNotifyGiveFromISR(comm_task_handle, &xHigherPriorityTaskWoken);
+    }
+
+    if (xHigherPriorityTaskWoken)
+    {
+        portYIELD_FROM_ISR();
+    }
 }
 
 void main_comm(void *arg)
 {
-    int last_ph = -1;
-    while (true)
+    int local_ph = ph_count;
+    while (1)
     {
-        int local_ph = ph_count;
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        local_ph = ph_count;
 
-        if (local_ph != last_ph)
+        switch (local_ph)
         {
-            last_ph = local_ph;
+            case 4: set_duty(duty, 0, 0, duty, 0, 0);
+            current_channel = ADC1_CHANNEL_0; break;
 
-            switch (local_ph)
-            {
-            case 4: // AH, BL → medir A
-                set_duty(c_u, 0, 0, c_u, 0, 0);current_channel = ADC1_CHANNEL_0;
-                break;
+            case 6: set_duty(0, 0, 0, duty, duty, 0);
+            current_channel = ADC1_CHANNEL_6; break;
 
-            case 6: // BL, CH → medir C
-                set_duty(0, 0, 0, c_u, c_u, 0);current_channel = ADC1_CHANNEL_6;
-                break;
+            case 2: set_duty(0, duty, 0, 0, duty, 0);
+            current_channel = ADC1_CHANNEL_6; break;
 
-            case 2: // CH, AL → medir C
-                set_duty(0, c_u, 0, 0, c_u, 0);current_channel = ADC1_CHANNEL_6;
-                break;
+            case 3: set_duty(0, duty, duty, 0, 0, 0);
+            current_channel = ADC1_CHANNEL_3; break;
 
-            case 3: // BH, AL → medir B
-                set_duty(0, c_u, c_u, 0, 0, 0);current_channel = ADC1_CHANNEL_3;
-                break;
+            case 1: set_duty(0, 0, duty, 0, 0, duty);
+            current_channel = ADC1_CHANNEL_3; break;
 
-            case 1: // BH, CL → medir B
-                set_duty(0, 0, c_u, 0, 0, c_u);current_channel = ADC1_CHANNEL_3;
-                break;
+            case 5: set_duty(duty, 0, 0, 0, 0, duty);
+            current_channel = ADC1_CHANNEL_0; break;
 
-            case 5: // AH, CL → medir A
-                set_duty(c_u, 0, 0, 0, 0, c_u);current_channel = ADC1_CHANNEL_0;
-                break;
-            }
+            default: set_duty(0, 0, 0, 0, 0, 0);break;
         }
     }
 }
 
 void current_control(void *arg)
 {
+    int64_t last_time_local = esp_timer_get_time();
+    const int64_t current_interval = 100; // 100 us = 10 kHz para empezar
+
     while (1)
     {
-        int64_t current_time = esp_timer_get_time();
+        int64_t now = esp_timer_get_time();
 
-        if ((current_time - last_time) >= interval)
+        if ((now - last_time_local) >= current_interval)
         {
+            last_time_local += current_interval;
 
-            last_time = current_time;
+            current_measurement = get_currents(duty);
 
-            // Lecturas
-            read_throttle(&adc_value);
-            rpm = get_rpms();
-            current_measurement = get_currents();
-
-            // Velocity control applied
-            v_error = adc_value - rpm;
-            v_u = PID_calc(v_error, PI_velocity[0], PI_velocity[1], interval / 1000000.0, &integral_v, false);
-
-            // Current control applied
             c_error = v_u - current_measurement;
-            c_u = PID_calc(c_error, PI_current[0], PI_current[1], interval / 1000000.0, &integral_c, true);
-            // Saturación V_U
-            if (c_u > 95.0)
-                c_u = 95.0;
-            else if (c_u < 0.0)
-                c_u = 0.0;
 
-            ESP_LOGW(TAG, "current: %f, rpm: %lld, DUTY: %f, Desired rpm's: %d\n", current_measurement, rpm, c_u, adc_value);
+            c_u = PID_calc(c_error,
+                           PI_current[0],
+                           PI_current[1],
+                           current_interval / 1000000.0,
+                           &integral_c,
+                           true);
+
+            if (c_u > 95.0f)
+                c_u = 95.0f;
+            else if (c_u < 0.0f)
+                c_u = 0.0f;
+                
         }
     }
 }
+
+void velocity_control(void *arg)
+{
+    int64_t last_time_local = esp_timer_get_time();
+    const int64_t speed_interval = 10000; // 10000 us = 10 ms = 100 Hz
+
+    while (1)
+    {
+        int64_t now = esp_timer_get_time();
+
+        if ((now - last_time_local) >= speed_interval)
+        {
+            last_time_local += speed_interval;
+
+            read_throttle(&adc_value);
+            rpm = get_rpms();
+
+            v_error = adc_value - rpm;
+
+            v_u = PID_calc(v_error,
+                                   PI_velocity[0],
+                                   PI_velocity[1],
+                                   speed_interval / 1000000.0,
+                                   &integral_v,
+                                   false);
+
+            if (v_u > 5.0f)
+                v_u = 5.0f;
+            else if (v_u < 0.0f)
+                v_u = 0.0f;
+
+            ESP_LOGI(TAG, "Current: %f, RPM: %lld, duty: %f", current_measurement, rpm, duty);
+        }
+    }
+}
+
 
 void app_main()
 {
@@ -134,19 +174,16 @@ esp_err_t init_isr()
 
 esp_err_t create_tasks()
 {
-    static uint8_t ucParameterToPass;
-    TaskHandle_t xHandle = NULL;
-    xTaskCreate(main_comm,
-                "Commutation",
-                4096,
-                &ucParameterToPass,
-                1,
-                &xHandle);
-    xTaskCreate(current_control,
-                "Current Control",
-                4096,
-                &ucParameterToPass,
-                2,
-                &xHandle);
+    BaseType_t ok;
+
+    ok = xTaskCreatePinnedToCore(main_comm, "Commutation", 4096, NULL, 4, &comm_task_handle, 1);
+    if (ok != pdPASS) ESP_LOGE("TASKS", "No se creó Commutation");
+
+    ok = xTaskCreatePinnedToCore(current_control, "Current Control", 4096, NULL, 3, NULL, 1);
+    if (ok != pdPASS) ESP_LOGE("TASKS", "No se creó Current Control");
+
+    ok = xTaskCreatePinnedToCore(velocity_control, "Velocity Control", 4096, NULL, 2, NULL, 0);
+    if (ok != pdPASS) ESP_LOGE("TASKS", "No se creó Velocity Control");
+
     return ESP_OK;
 }
