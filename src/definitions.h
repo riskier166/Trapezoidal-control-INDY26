@@ -35,12 +35,13 @@ float raw_A, raw_B, raw_C;
 volatile float currentA, currentB, currentC, gen_current; // Current readings for each phase
 
 // Control
-float current_reference = 1.5;
+float current_reference = 1.5, velocity_reference = 100.0;
 float c_u = 0.0, c_error = 0.0;    // CURRENT control variables
-float velocity_reference = 300.0, v_u = 0.0, v_error = 0.0; // VELOCITY control variables
+float v_u = 0.0, v_error = 0.0; // VELOCITY control variables
 float PI_current[2] = {0.103672557, 160.221225};            // Coeficientes P:10.0, I:500.0
 float PI_velocity[2] = {0.20464, 0.25677};                  // Coeficientes P:10.0, I:500.0
 volatile float current, raw = 0, current_global = 0;
+float integral_v = 0, integral_c = 0;
 // PI
 float prev_error = 0, integral = 0;
 
@@ -184,7 +185,7 @@ float get_currents()
     float Vsense = (Vout) / 20.0;
     float current = Vsense / 0.001;
 
-    current = current * (duty / 100.0 + 0.133); // Compensación por duty cycle *15 funcionó chido*
+    current = current * (c_u / 100.0 + 0.133); // Compensación por duty cycle *15 funcionó chido*
 
     // filtro coqueto
     current_filtered = (alpha_c * current + (1 - alpha_c) * current_filtered);
@@ -215,43 +216,26 @@ float get_rpms()
     return rpm_filtered;
 }
 
-float PID_calc(float error, float Kp, float Ki, float dt, bool type)
+float PID_calc(float error, float Kp, float Ki, float dt, float *integral, bool type)
 {
-    float U;
-
     float P = Kp * error;
 
-    // Propuesta de integral
-    float integral_candidate = integral + error * dt;
+    float integral_candidate = *integral + error * dt;
     float I = Ki * integral_candidate;
 
-    U = P + I;
+    float U = P + I;
 
-    if (!type) // Si es control de velocidad, no le sumes la integral si saturó
+    if (!type) // velocidad
     {
-        // Clamp
-        if (U > 5.0f)
-        {
-            U = 5.0f;
-        }
-        else if (U < 0.0f)
-        {
-            U = 0.0f;
-        }
+        if (U > 5.0f) U = 5.0f;
+        else if (U < 0.0f) U = 0.0f;
     }
-    else // Si es control de corriente, siempre sumale la integral (porque es más crítico)
+    else // corriente
     {
-        integral = integral_candidate;
+        *integral = integral_candidate;
 
-        // Clamp
-        if (U > 95.0f)
-        {
-            U = 95.0f;
-        }
-        else if (U < 0.0f)
-        {
-            U = 0.0f;
-        }
+        if (U > 95.0f) U = 95.0f;
+        else if (U < 0.0f) U = 0.0f;
     }
 
     return U;

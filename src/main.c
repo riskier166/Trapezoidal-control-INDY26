@@ -78,16 +78,11 @@ void current_control(void *arg)
 
             // Velocity control applied
             v_error = adc_value - rpm;
-            v_u = PID_calc(v_error, PI_velocity[0], PI_velocity[1], interval / 1000000.0, false);
-            // Saturación V_U
-            if (v_u > 5.0)
-                v_u = 5.0;
-            else if (v_u < 0.0)
-                v_u = 0.0;
+            v_u = PID_calc(v_error, PI_velocity[0], PI_velocity[1], interval / 1000000.0, &integral_v, false);
 
             // Current control applied
             c_error = v_u - current_measurement;
-            c_u = PID_calc(c_error, PI_current[0], PI_current[1], interval / 1000000.0, true);
+            c_u = PID_calc(c_error, PI_current[0], PI_current[1], interval / 1000000.0, &integral_c, true);
             // Saturación V_U
             if (c_u > 95.0)
                 c_u = 95.0;
