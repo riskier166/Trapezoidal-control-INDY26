@@ -16,41 +16,57 @@ void isr_phase(void *arg)
 void main_comm(void *arg)
 {
     int last_ph = -1;
+
+    // Secuencia de arranque open-loop
+    const int startup_seq[6] = {4, 5, 1, 3, 2, 6};
+    int startup_idx = 0;
+
+    // Control de tiempo para startup
+    int64_t last_startup_step = 0;
+    bool aligned = false;
+
     while (true)
     {
+        int64_t now = esp_timer_get_time();
+        int local_rpm = rpm;
         int local_ph = ph_count;
-
-        if (local_ph != last_ph)
+        if (local_rpm < 20 && adc_value > 20) // umbral de arranque
         {
-            last_ph = local_ph;
-
-            switch (local_ph)
+            //Alineación inicial 
+            if (!aligned)
             {
-            case 4: // AH, BL → medir A
-                set_duty(c_u, 0, 0, c_u, 0, 0);current_channel = ADC1_CHANNEL_0;
-                break;
+                commutate(local_ph, duty); // Commutate según el estado actual de los sensores Hall
 
-            case 6: // BL, CH → medir C
-                set_duty(0, 0, 0, c_u, c_u, 0);current_channel = ADC1_CHANNEL_6;
-                break;
+                last_startup_step = now;
+                aligned = true;
 
-            case 2: // CH, AL → medir C
-                set_duty(0, c_u, 0, 0, c_u, 0);current_channel = ADC1_CHANNEL_6;
-                break;
+                vTaskDelay(pdMS_TO_TICKS(100));
+                continue;
+            }
 
-            case 3: // BH, AL → medir B
-                set_duty(0, c_u, c_u, 0, 0, 0);current_channel = ADC1_CHANNEL_3;
-                break;
+            if ((now - last_startup_step) >= 20000) // 40 ms por paso, ajustable
+            {
+                last_startup_step = now;
 
-            case 1: // BH, CL → medir B
-                set_duty(0, 0, c_u, 0, 0, c_u);current_channel = ADC1_CHANNEL_3;
-                break;
-
-            case 5: // AH, CL → medir A
-                set_duty(c_u, 0, 0, 0, 0, c_u);current_channel = ADC1_CHANNEL_0;
-                break;
+                commutate(startup_seq[startup_idx], duty); // Commutate al siguiente estado de la secuencia de arranque
+                startup_idx++;
+                if (startup_idx >= 6)
+                    startup_idx = 0;
             }
         }
+        else
+        {
+            aligned = false; // reinicia startup para la próxima vez
+
+            if (local_ph != last_ph)
+            {
+                last_ph = local_ph;
+
+                commutate(local_ph, c_u); // Commutate según el estado actual de los sensores Hall
+            }
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
 }
 
@@ -83,7 +99,7 @@ void current_control(void *arg)
             else if (c_u < 0.0)
                 c_u = 0.0;
 
-            ESP_LOGW(TAG, "current: %f, rpm: %lld, DUTY: %f, Desired rpm's: %d\n", current_measurement, rpm, c_u, adc_value);
+            //ESP_LOGW(TAG, "current: %f, rpm: %lld, DUTY: %f, Desired rpm's: %d\n", current_measurement, rpm, c_u, adc_value);
         }
     }
 }
@@ -106,7 +122,6 @@ void app_main()
     init_isr();
     create_tasks();
     ph_count = gpio_get_level(HALL_PIN[0]) | gpio_get_level(HALL_PIN[1]) << 1 | gpio_get_level(HALL_PIN[2]) << 2;
-    // set_duty(0, 0, 0, 0, 0, 0); // Inicializa con duty 0
 }
 
 esp_err_t init_isr()

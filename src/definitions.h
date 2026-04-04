@@ -36,10 +36,10 @@ volatile float currentA, currentB, currentC, gen_current; // Current readings fo
 
 // Control
 float current_reference = 1.5, velocity_reference = 100.0;
-float c_u = 0.0, c_error = 0.0;    // CURRENT control variables
-float v_u = 0.0, v_error = 0.0; // VELOCITY control variables
-float PI_current[2] = {0.103672557, 160.221225};            // Coeficientes P:10.0, I:500.0
-float PI_velocity[2] = {0.20464, 0.25677};                  // Coeficientes P:10.0, I:500.0
+float c_u = 0.0, c_error = 0.0;                  // CURRENT control variables
+float v_u = 0.0, v_error = 0.0;                  // VELOCITY control variables
+float PI_current[2] = {0.103672557, 160.221225}; // Coeficientes P:10.0, I:500.0
+float PI_velocity[2] = {0.20464, 0.25677};       // Coeficientes P:10.0, I:500.0
 volatile float current, raw = 0, current_global = 0;
 float integral_v = 0, integral_c = 0;
 // PI
@@ -49,7 +49,7 @@ float prev_error = 0, integral = 0;
 volatile int ph_count = 0; // Hall sensors state
 // PWM
 volatile int adc_value = 0;
-float duty = 25.0;       // Duty cycle vars
+float duty = 10.0;       // Duty cycle vars
 int deadTime_ticks = 64; // 64 ticks = 400 ns
 
 // GPIO declarations
@@ -131,9 +131,10 @@ esp_err_t read_throttle(uint16_t *value)
 
     if (ret == ESP_OK)
     {
-        *value = ((((uint16_t)raw)) * 2523.00 / 4095.00)-560; // convert to percentage
+        *value = ((((uint16_t)raw)) * 2523.00 / 4095.00) - 560; // convert to percentage
     }
-    if (*value > 1330) *value = 0; // Clamp
+    if (*value > 1330)
+        *value = 0; // Clamp
 
     return ret;
 }
@@ -161,6 +162,42 @@ esp_err_t set_throttle(void)
         ADC_ATTEN_DB_11 // hasta ~3.3V
     );
     return ret;
+}
+
+void commutate(int state, float duty)
+{
+    switch (state)
+    {
+    case 4: // AH, BL
+        set_duty(duty, 0, 0, duty, 0, 0);
+        current_channel = ADC1_CHANNEL_0;
+        break;
+
+    case 5: // AH, CL
+        set_duty(duty, 0, 0, 0, 0, duty);
+        current_channel = ADC1_CHANNEL_0;
+        break;
+
+    case 1: // BH, CL
+        set_duty(0, 0, duty, 0, 0, duty);
+        current_channel = ADC1_CHANNEL_3;
+        break;
+
+    case 3: // BH, AL
+        set_duty(0, duty, duty, 0, 0, 0);
+        current_channel = ADC1_CHANNEL_3;
+        break;
+
+    case 2: // CH, AL
+        set_duty(0, duty, 0, 0, duty, 0);
+        current_channel = ADC1_CHANNEL_6;
+        break;
+
+    case 6: // BL, CH
+        set_duty(0, 0, 0, duty, duty, 0);
+        current_channel = ADC1_CHANNEL_6;
+        break;
+    }
 }
 
 float get_currents()
@@ -192,7 +229,7 @@ float get_currents()
 
     return fabs(current_filtered);
 }
- 
+
 float get_rpms()
 {
     int64_t now = esp_timer_get_time();
@@ -227,15 +264,19 @@ float PID_calc(float error, float Kp, float Ki, float dt, float *integral, bool 
 
     if (!type) // velocidad
     {
-        if (U > 5.0f) U = 5.0f;
-        else if (U < 0.0f) U = 0.0f;
+        if (U > 5.0f)
+            U = 5.0f;
+        else if (U < 0.0f)
+            U = 0.0f;
     }
     else // corriente
     {
         *integral = integral_candidate;
 
-        if (U > 95.0f) U = 95.0f;
-        else if (U < 0.0f) U = 0.0f;
+        if (U > 95.0f)
+            U = 95.0f;
+        else if (U < 0.0f)
+            U = 0.0f;
     }
 
     return U;
