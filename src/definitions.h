@@ -192,26 +192,26 @@ float get_currents()
 
     return fabs(current_filtered);
 }
-
+ 
 float get_rpms()
 {
-    float rpm_local;
-    static int64_t last_dt = 0;
+    int64_t now = esp_timer_get_time();
+    int64_t dt_local = hall_dt;
+    int64_t last_hall_local = last_hall_time;
+    int64_t no_hall_time = now - last_hall_local;
 
-    if (hall_dt > 0)
+    float rpm_local = 0.0f;
+
+    if (no_hall_time <= 100000 && dt_local > 0)
     {
-        rpm_local = (60.0 * 1000000.0) / (hall_dt * RKV_Coeff);
+        rpm_local = (60.0f * 1000000.0f) / (dt_local * RKV_Coeff);
     }
     else
     {
-        rpm_local = 0.0;
+        rpm_local = 0.0f;
     }
 
-    if (hall_dt != last_dt)
-    {
-        rpm_filtered = alpha_v * rpm_local + (1 - alpha_v) * rpm_filtered;
-        last_dt = hall_dt;
-    }
+    rpm_filtered = alpha_v * rpm_local + (1.0f - alpha_v) * rpm_filtered;
 
     return rpm_filtered;
 }
