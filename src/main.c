@@ -18,7 +18,7 @@ void main_comm(void *arg)
     int last_ph = -1;
 
     // Secuencia de arranque open-loop
-    const int startup_seq[6] = {4, 5, 1, 3, 2, 6};
+    const int startup_seq[6] = {5, 4, 6, 2, 3, 1};
     int startup_idx = 0;
 
     // Control de tiempo para startup
@@ -99,7 +99,7 @@ void current_control(void *arg)
             else if (c_u < 0.0)
                 c_u = 0.0;
 
-            //ESP_LOGW(TAG, "current: %f, rpm: %lld, DUTY: %f, Desired rpm's: %d\n", current_measurement, rpm, c_u, adc_value);
+            ESP_LOGW(TAG, "current: %f, rpm: %lld, DUTY: %f, Desired rpm's: %d\n", current_measurement, rpm, c_u, adc_value);
         }
     }
 }

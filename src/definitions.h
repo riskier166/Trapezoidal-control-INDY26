@@ -131,7 +131,7 @@ esp_err_t read_throttle(uint16_t *value)
 
     if (ret == ESP_OK)
     {
-        *value = ((((uint16_t)raw)) * 2523.00 / 4095.00) - 560; // convert to percentage
+        *value = ((((uint16_t)raw)) * 1500.00 / 4095.00) - 330; // convert to percentage
     }
     if (*value > 1330)
         *value = 0; // Clamp
@@ -168,34 +168,34 @@ void commutate(int state, float duty)
 {
     switch (state)
     {
-    case 4: // AH, BL
+    case 5: // AH, BL → medir A
         set_duty(duty, 0, 0, duty, 0, 0);
         current_channel = ADC1_CHANNEL_0;
         break;
 
-    case 5: // AH, CL
-        set_duty(duty, 0, 0, 0, 0, duty);
-        current_channel = ADC1_CHANNEL_0;
+    case 4: // BL, CH → medir C
+        set_duty(0, 0, 0, duty, duty, 0);
+        current_channel = ADC1_CHANNEL_6;
         break;
 
-    case 1: // BH, CL
-        set_duty(0, 0, duty, 0, 0, duty);
-        current_channel = ADC1_CHANNEL_3;
-        break;
-
-    case 3: // BH, AL
-        set_duty(0, duty, duty, 0, 0, 0);
-        current_channel = ADC1_CHANNEL_3;
-        break;
-
-    case 2: // CH, AL
+    case 6: // CH, AL → medir C
         set_duty(0, duty, 0, 0, duty, 0);
         current_channel = ADC1_CHANNEL_6;
         break;
 
-    case 6: // BL, CH
-        set_duty(0, 0, 0, duty, duty, 0);
-        current_channel = ADC1_CHANNEL_6;
+    case 2: // BH, AL → medir B
+        set_duty(0, duty, duty, 0, 0, 0);
+        current_channel = ADC1_CHANNEL_3;
+        break;
+
+    case 3: // BH, CL → medir B
+        set_duty(0, 0, duty, 0, 0, duty);
+        current_channel = ADC1_CHANNEL_3;
+        break;
+
+    case 1: // AH, CL → medir A
+        set_duty(duty, 0, 0, 0, 0, duty);
+        current_channel = ADC1_CHANNEL_0;
         break;
     }
 }
@@ -249,6 +249,9 @@ float get_rpms()
     }
 
     rpm_filtered = alpha_v * rpm_local + (1.0f - alpha_v) * rpm_filtered;
+
+    if (rpm_filtered > 2000.0)
+        rpm_filtered = 0.0;
 
     return rpm_filtered;
 }
