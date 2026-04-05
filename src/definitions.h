@@ -49,7 +49,7 @@ float prev_error = 0, integral = 0;
 volatile int ph_count = 0; // Hall sensors state
 // PWM
 volatile int adc_value = 0;
-float duty = 25.0;       // Duty cycle vars
+float duty = 55.0;       // Duty cycle vars
 int deadTime_ticks = 64; // 64 ticks = 400 ns
 
 // GPIO declarations
