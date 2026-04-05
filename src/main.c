@@ -30,12 +30,12 @@ void main_comm(void *arg)
         int64_t now = esp_timer_get_time();
         int local_rpm = rpm;
         int local_ph = ph_count;
-        if (local_rpm < 20 && adc_value > 20) // umbral de arranque
+        if (local_rpm < 1 && adc_value > 10) // umbral de arranque
         {
             //Alineación inicial 
             if (!aligned)
             {
-                commutate(local_ph, duty); // Commutate según el estado actual de los sensores Hall
+                commutate(5, duty); // Commutate según el estado actual de los sensores Hall
 
                 last_startup_step = now;
                 aligned = true;
@@ -44,11 +44,11 @@ void main_comm(void *arg)
                 continue;
             }
 
-            if ((now - last_startup_step) >= 20000) // 40 ms por paso, ajustable
+            if ((now - last_startup_step) >= 40000) // 40 ms por paso, ajustable
             {
                 last_startup_step = now;
 
-                commutate(startup_seq[startup_idx], duty); // Commutate al siguiente estado de la secuencia de arranque
+                commutate(startup_seq[startup_idx], c_u); // Commutate al siguiente estado de la secuencia de arranque
                 startup_idx++;
                 if (startup_idx >= 6)
                     startup_idx = 0;
