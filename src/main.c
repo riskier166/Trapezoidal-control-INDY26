@@ -35,7 +35,7 @@ void main_comm(void *arg)
             //Alineación inicial 
             if (!aligned)
             {
-                commutate(5, duty); // Commutate según el estado actual de los sensores Hall
+                commutate(local_ph, duty); // Commutate según el estado actual de los sensores Hall
 
                 last_startup_step = now;
                 aligned = true;
@@ -107,6 +107,7 @@ void current_control(void *arg)
 void app_main()
 {
     esp_task_wdt_deinit();
+    get_currents();
     for (int i = 0; i < 50; i++)
     {
         raw_A += adc1_get_raw(ADC1_CHANNEL_0);
