@@ -13,6 +13,8 @@
 #include "esp_task_wdt.h"
 #include "math.h"
 
+int16_t prev_val_th, current_val_th;
+
 // polling & time dependances for control loop
 int last_time = 0, interval = 100; // 1000us CURRENTinterval
 
@@ -38,10 +40,11 @@ volatile float currentA, currentB, currentC, gen_current; // Current readings fo
 float current_reference = 1.5, velocity_reference = 100.0;
 float c_u = 0.0, c_error = 0.0;                  // CURRENT control variables
 float v_u = 0.0, v_error = 0.0;                  // VELOCITY control variables
-float PI_current[2] = {0.103672557, 160.221225}; // Coeficientes P:10.0, I:500.0
-float PI_velocity[2] = {0.20464, 0.25677};       // Coeficientes P:10.0, I:500.0
+float PI_current[2] = {1.028, 3597.3}; // Coeficientes P:10.0, I:500.0
+float PI_velocity[2] = {0.85, 4.3};       // Coeficientes P:10.0, I:500.0
 volatile float current, raw = 0, current_global = 0;
 float integral_v = 0, integral_c = 0;
+float error_ant_c = 0, error_ant_v = 0;
 // PI
 float prev_error = 0, integral = 0;
 
@@ -131,11 +134,12 @@ esp_err_t read_throttle(uint16_t *value)
 
     if (ret == ESP_OK)
     {
-        *value = ((((uint16_t)raw)) * 800.00 / 4095.00)-166; // convert to percentage
+        *value = ((((uint16_t)raw)) * 800.00 / 4095.00)-171; // convert to percentage
     }
+    
     if (*value > 1330)
         *value = 0; // Clamp
-
+    
     return ret;
 }
 
@@ -162,42 +166,6 @@ esp_err_t set_throttle(void)
         ADC_ATTEN_DB_11 // hasta ~3.3V
     );
     return ret;
-}
-
-void commutate(int state, float duty)
-{
-    switch (state)
-    {
-    case 5: // AH, BL → medir A
-        set_duty(duty, 0, 0, duty, 0, 0);
-        current_channel = ADC1_CHANNEL_0;
-        break;
-
-    case 4: // BL, CH → medir C
-        set_duty(0, 0, 0, duty, duty, 0);
-        current_channel = ADC1_CHANNEL_6;
-        break;
-
-    case 6: // CH, AL → medir C
-        set_duty(0, duty, 0, 0, duty, 0);
-        current_channel = ADC1_CHANNEL_6;
-        break;
-
-    case 2: // BH, AL → medir B
-        set_duty(0, duty, duty, 0, 0, 0);
-        current_channel = ADC1_CHANNEL_3;
-        break;
-
-    case 3: // BH, CL → medir B
-        set_duty(0, 0, duty, 0, 0, duty);
-        current_channel = ADC1_CHANNEL_3;
-        break;
-
-    case 1: // AH, CL → medir A
-        set_duty(duty, 0, 0, 0, 0, duty);
-        current_channel = ADC1_CHANNEL_0;
-        break;
-    }
 }
 
 float get_currents()
@@ -256,32 +224,72 @@ float get_rpms()
     return rpm_filtered;
 }
 
-float PID_calc(float error, float Kp, float Ki, float dt, float *integral, bool type)
+float PI_doc_velocidad(float error_act, float Kp, float Ki, float dt)
 {
-    float P = Kp * error;
+    float P = Kp * error_act;
 
-    float integral_candidate = *integral + error * dt;
-    float I = Ki * integral_candidate;
+    integral_v += (error_act + error_ant_v) * dt * 0.5f;
 
-    float U = P + I;
-
-    if (!type) // velocidad
+    if (integral_v > 15.0f)
     {
-        if (U > 6.0f)
-            U = 6.0f;
-        else if (U < 0.0f)
-            U = 0.0f;
+        integral_v = 15.0f;
+        // opcional: anti-windup
     }
-    else // corriente
+    else if (integral_v < 0.0f)
     {
-        *integral = integral_candidate;
-
-        if (U > 95.0f)
-            U = 95.0f;
-        else if (U < 0.0f)
-            U = 0.0f;
+        integral_v = 0.0f;
+        // opcional: anti-windup
     }
 
+
+    float U = P + Ki * integral_v;
+
+    if (U > 15.0f)
+    {
+        U = 15.0f;
+        // opcional: anti-windup
+    }
+    else if (U < 0.0f)
+    {
+        U = 0.0f;
+        // opcional: anti-windup
+    }
+
+    error_ant_v = error_act;
+    return U;
+}
+
+float PI_doc_corriente(float error_act, float Kp, float Ki, float dt)
+{
+    float P = Kp * error_act;
+
+    integral_c += (error_act + error_ant_c) * dt * 0.5f;
+
+    if (integral_c > 95.0f)
+    {
+        integral_c = 95.0f;
+        // opcional: anti-windup
+    }
+    else if (integral_c < 0.0f)
+    {
+        integral_c = 0.0f;
+        // opcional: anti-windup
+    }
+
+    float U = P + Ki * integral_c;
+
+    if (U > 95.0f)
+    {
+        U = 95.0f;
+        // opcional: anti-windup
+    }
+    else if (U < 0.0f)
+    {
+        U = 0.0f;
+        // opcional: anti-windup
+    }
+
+    error_ant_c = error_act;
     return U;
 }
 

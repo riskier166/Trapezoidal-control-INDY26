@@ -15,91 +15,74 @@ void isr_phase(void *arg)
 
 void main_comm(void *arg)
 {
-    int last_ph = -1;
-
-    // Secuencia de arranque open-loop
-    const int startup_seq[6] = {5, 4, 6, 2, 3, 1};
-    int startup_idx = 0;
-
-    // Control de tiempo para startup
-    int64_t last_startup_step = 0;
-    bool aligned = false;
-
     while (true)
     {
-        int64_t now = esp_timer_get_time();
-        int local_rpm = rpm;
-        int local_ph = ph_count;
-        if (local_rpm < 1 && adc_value > 10) // umbral de arranque
+        switch (ph_count)
         {
-            //Alineación inicial 
-            if (!aligned)
-            {
-                commutate(local_ph, duty); // Commutate según el estado actual de los sensores Hall
+        case 5: // AH, BL → medir A
+            set_duty(c_u, 0, 0, c_u, 0, 0);
+            current_channel = ADC1_CHANNEL_0;
+            break;
 
-                last_startup_step = now;
-                aligned = true;
+        case 4: // BL, CH → medir C
+            set_duty(0, 0, 0, c_u, c_u, 0);
+            current_channel = ADC1_CHANNEL_6;
+            break;
 
-                vTaskDelay(pdMS_TO_TICKS(100));
-                continue;
-            }
+        case 6: // CH, AL → medir C
+            set_duty(0, c_u, 0, 0, c_u, 0);
+            current_channel = ADC1_CHANNEL_6;
+            break;
 
-            if ((now - last_startup_step) >= 40000) // 40 ms por paso, ajustable
-            {
-                last_startup_step = now;
+        case 2: // BH, AL → medir B
+            set_duty(0, c_u, c_u, 0, 0, 0);
+            current_channel = ADC1_CHANNEL_3;
+            break;
 
-                commutate(startup_seq[startup_idx], c_u); // Commutate al siguiente estado de la secuencia de arranque
-                startup_idx++;
-                if (startup_idx >= 6)
-                    startup_idx = 0;
-            }
+        case 3: // BH, CL → medir B
+            set_duty(0, 0, c_u, 0, 0, c_u);
+            current_channel = ADC1_CHANNEL_3;
+            break;
+
+        case 1: // AH, CL → medir A
+            set_duty(c_u, 0, 0, 0, 0, c_u);
+            current_channel = ADC1_CHANNEL_0;
+            break;
         }
-        else
-        {
-            aligned = false; // reinicia startup para la próxima vez
-
-            if (local_ph != last_ph)
-            {
-                last_ph = local_ph;
-
-                commutate(local_ph, c_u); // Commutate según el estado actual de los sensores Hall
-            }
-        }
-
-        vTaskDelay(pdMS_TO_TICKS(1));
     }
 }
 
 void current_control(void *arg)
 {
+    static int speed_div = 0;
+
     while (1)
     {
         int64_t current_time = esp_timer_get_time();
 
         if ((current_time - last_time) >= interval)
         {
-
             last_time = current_time;
 
-            // Lecturas
             read_throttle(&adc_value);
             rpm = get_rpms();
             current_measurement = get_currents();
 
-            // Velocity control applied
-            v_error = adc_value - rpm;
-            v_u = PID_calc(v_error, PI_velocity[0], PI_velocity[1], interval / 1000000.0, &integral_v, false);
+            // velocidad
+            speed_div++;
+            if (speed_div >= 10)   // si interval=100us -> 10ms => 100 Hz
+            {
+                speed_div = 0;
+                v_error = adc_value - rpm;
+                v_u = PI_doc_velocidad(v_error, PI_velocity[0], PI_velocity[1], 0.01f);
+            }
 
-            // Current control applied
+            // corriente
             c_error = v_u - current_measurement;
-            c_u = PID_calc(c_error, PI_current[0], PI_current[1], interval / 1000000.0, &integral_c, true);
-            // Saturación V_U
-            if (c_u > 95.0)
-                c_u = 95.0;
-            else if (c_u < 0.0)
-                c_u = 0.0;
+            c_u = PI_doc_corriente(c_error, PI_current[0], PI_current[1], interval / 1000000.0f);
 
-            ESP_LOGW(TAG, "current: %f, rpm: %lld, DUTY: %f, Desired rpm's: %d\n", current_measurement, rpm, c_u, adc_value);
+            if (c_u > 95.0f) c_u = 95.0f;
+            else if (c_u < 0.0f) c_u = 0.0f;
         }
     }
 }
@@ -121,8 +104,8 @@ void app_main()
     set_throttle();
     set_pwm();
     init_isr();
-    create_tasks();
     ph_count = gpio_get_level(HALL_PIN[0]) | gpio_get_level(HALL_PIN[1]) << 1 | gpio_get_level(HALL_PIN[2]) << 2;
+    create_tasks();
 }
 
 esp_err_t init_isr()
