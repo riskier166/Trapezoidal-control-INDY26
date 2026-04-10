@@ -40,8 +40,8 @@ volatile float currentA, currentB, currentC, gen_current; // Current readings fo
 float current_reference = 1.5, velocity_reference = 100.0;
 float c_u = 0.0, c_error = 0.0;                  // CURRENT control variables
 float v_u = 0.0, v_error = 0.0;                  // VELOCITY control variables
-float PI_current[2] = {1.028, 3597.3}; // Coeficientes P:10.0, I:500.0
-float PI_velocity[2] = {0.85, 4.3};       // Coeficientes P:10.0, I:500.0
+float PI_current[2] = {0.01, 8.0}; // Coeficientes P:10.0, I:500.0
+float PI_velocity[2] = {10, 0.1};       // Coeficientes P:10.0, I:500.0
 volatile float current, raw = 0, current_global = 0;
 float integral_v = 0, integral_c = 0;
 float error_ant_c = 0, error_ant_v = 0;
@@ -230,9 +230,9 @@ float PI_doc_velocidad(float error_act, float Kp, float Ki, float dt)
 
     integral_v += (error_act + error_ant_v) * dt * 0.5f;
 
-    if (integral_v > 15.0f)
+    if (integral_v > 6.0f)
     {
-        integral_v = 15.0f;
+        integral_v = 6.0f;
         // opcional: anti-windup
     }
     else if (integral_v < 0.0f)
@@ -244,9 +244,9 @@ float PI_doc_velocidad(float error_act, float Kp, float Ki, float dt)
 
     float U = P + Ki * integral_v;
 
-    if (U > 15.0f)
+    if (U > 10.0f)
     {
-        U = 15.0f;
+        U = 10.0f;
         // opcional: anti-windup
     }
     else if (U < 0.0f)

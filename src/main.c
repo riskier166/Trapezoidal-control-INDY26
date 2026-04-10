@@ -75,6 +75,7 @@ void current_control(void *arg)
                 speed_div = 0;
                 v_error = adc_value - rpm;
                 v_u = PI_doc_velocidad(v_error, PI_velocity[0], PI_velocity[1], 0.01f);
+                //ESP_LOGI(TAG, "RPM: %lld, Vel Ref: %d, duty: %f", rpm, adc_value, c_u);
             }
 
             // corriente
