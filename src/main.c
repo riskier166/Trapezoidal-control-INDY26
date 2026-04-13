@@ -64,26 +64,35 @@ void current_control(void *arg)
         {
             last_time = current_time;
 
-            read_throttle(&adc_value);
-            rpm = get_rpms();
             current_measurement = get_currents();
 
             // velocidad
             speed_div++;
-            if (speed_div >= 10)   // si interval=100us -> 10ms => 100 Hz
+            if (speed_div >= 10) // si interval=100us -> 10ms => 100 Hz
             {
                 speed_div = 0;
+                read_throttle(&adc_value);
+                if (adc_value == 0)
+                {
+                    v_u = 0.0f;
+                    integral_v = 0.0f;
+                    integral_c = 0.0f;
+                    c_u = 0.0f;
+                }
+                rpm = get_rpms();
                 v_error = adc_value - rpm;
                 v_u = PI_doc_velocidad(v_error, PI_velocity[0], PI_velocity[1], 0.01f);
-                //ESP_LOGI(TAG, "RPM: %lld, Vel Ref: %d, duty: %f", rpm, adc_value, c_u);
+                //ESP_LOGI(TAG, "Error velocidad: %f, Error corriente: %f, Vel Ref: %d, U Corriente: %f, U velocidad: %f", v_error, c_error, adc_value, c_u, v_u);
             }
 
             // corriente
             c_error = v_u - current_measurement;
             c_u = PI_doc_corriente(c_error, PI_current[0], PI_current[1], interval / 1000000.0f);
 
-            if (c_u > 95.0f) c_u = 95.0f;
-            else if (c_u < 0.0f) c_u = 0.0f;
+            if (c_u > 95.0f)
+                c_u = 95.0f;
+            else if (c_u < 0.0f)
+                c_u = 0.0f;
         }
     }
 }

@@ -37,11 +37,11 @@ float raw_A, raw_B, raw_C;
 volatile float currentA, currentB, currentC, gen_current; // Current readings for each phase
 
 // Control
-float current_reference = 1.5, velocity_reference = 100.0;
+float current_reference = 1.5, velocity_reference = 300.0;
 float c_u = 0.0, c_error = 0.0;                  // CURRENT control variables
 float v_u = 0.0, v_error = 0.0;                  // VELOCITY control variables
-float PI_current[2] = {0.01, 8.0}; // Coeficientes P:10.0, I:500.0
-float PI_velocity[2] = {10, 0.1};       // Coeficientes P:10.0, I:500.0
+float PI_current[2] = {0.11, 168.77}; 
+float PI_velocity[2] = {10.30, 5.9};
 volatile float current, raw = 0, current_global = 0;
 float integral_v = 0, integral_c = 0;
 float error_ant_c = 0, error_ant_v = 0;
@@ -134,10 +134,10 @@ esp_err_t read_throttle(uint16_t *value)
 
     if (ret == ESP_OK)
     {
-        *value = ((((uint16_t)raw)) * 800.00 / 4095.00)-171; // convert to percentage
+        *value = ((((uint16_t)raw)) * 3500.00 / 4095.00)-742; // convert to percentage
     }
     
-    if (*value > 1330)
+    if (*value > 2550)
         *value = 0; // Clamp
     
     return ret;
@@ -228,35 +228,23 @@ float PI_doc_velocidad(float error_act, float Kp, float Ki, float dt)
 {
     float P = Kp * error_act;
 
+    // Integración trapezoidal
     integral_v += (error_act + error_ant_v) * dt * 0.5f;
 
-    if (integral_v > 6.0f)
-    {
-        integral_v = 6.0f;
-        // opcional: anti-windup
-    }
-    else if (integral_v < 0.0f)
-    {
-        integral_v = 0.0f;
-        // opcional: anti-windup
-    }
+    float U_unsat = P + Ki * integral_v;
 
+    // Saturación de salida
+    float U_sat = U_unsat;
+    if (U_sat > 10.0f) U_sat = 10.0f;
+    else if (U_sat < 0.0f) U_sat = 0.0f;
 
-    float U = P + Ki * integral_v;
-
-    if (U > 10.0f)
-    {
-        U = 10.0f;
-        // opcional: anti-windup
-    }
-    else if (U < 0.0f)
-    {
-        U = 0.0f;
-        // opcional: anti-windup
-    }
+    // Back-calculation: el error de saturación retroalimenta al integrador
+    // Tt es la constante de tracking (típico: sqrt(1/Ki) o tuneable)
+    const float Tt = 0.05f;  // prueba entre 0.02 y 0.1
+    integral_v += ((U_sat - U_unsat) / Tt) * dt;
 
     error_ant_v = error_act;
-    return U;
+    return U_sat;
 }
 
 float PI_doc_corriente(float error_act, float Kp, float Ki, float dt)
