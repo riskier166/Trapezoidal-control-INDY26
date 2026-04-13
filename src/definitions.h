@@ -123,26 +123,6 @@ void set_duty(float AH, float AL, float BH, float BL, float CH, float CL)
     mcpwm_set_duty(MCPWM_UNIT_0, MCPWM_TIMER_0, MCPWM_GEN_B, CL); // Fase CL
 }
 
-// ADC2 throttle reading function
-esp_err_t read_throttle(uint16_t *value)
-{
-    int raw = 0;
-    esp_err_t ret = adc2_get_raw(
-        ADC2_CHANNEL_0,
-        ADC_WIDTH_BIT_12,
-        &raw);
-
-    if (ret == ESP_OK)
-    {
-        *value = ((((uint16_t)raw)) * 3500.00 / 4095.00)-742; // convert to percentage
-    }
-    
-    if (*value > 2550)
-        *value = 0; // Clamp
-    
-    return ret;
-}
-
 esp_err_t read_current()
 {
     adc1_config_width(ADC_WIDTH_BIT_12);                        // Resolución de 12 bits
@@ -167,6 +147,27 @@ esp_err_t set_throttle(void)
     );
     return ret;
 }
+
+// ADC2 throttle reading function
+esp_err_t read_throttle(uint16_t *value)
+{
+    int raw = 0;
+    esp_err_t ret = adc2_get_raw(
+        ADC2_CHANNEL_0,
+        ADC_WIDTH_BIT_12,
+        &raw);
+
+    if (ret == ESP_OK)
+    {
+        *value = ((((uint16_t)raw)) * 3500.00 / 4095.00)-742; // convert to percentage
+    }
+    
+    if (*value > 2550)
+        *value = 0; // Clamp
+    
+    return ret;
+}
+
 
 float get_currents()
 {
